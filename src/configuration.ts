@@ -39,7 +39,7 @@ interface JSONPhaseState extends Omit<PhaseState, "dateTime"> {
     /**
      * Date/time the phase was last published, as a string.
      */
-    dateTime: string;
+    dateTime?: string;
 }
 
 /**
@@ -214,10 +214,12 @@ const jsonLocalConfiguration: JSONLocalConfiguration = localConfigurationJSON;
  * Internal phase states.
  */
 function fromJSONPhaseStates(jsonPhaseStates: Readonly<Partial<Record<Phase, JSONPhaseState>>> | undefined): Readonly<Partial<Record<Phase, PhaseState>>> {
-    return Object.fromEntries(Object.entries(jsonPhaseStates ?? {}).map(([phase, jsonPhaseState]) => [phase, {
-        ...jsonPhaseState,
-        dateTime: new Date(jsonPhaseState.dateTime)
-    }]));
+    return Object.fromEntries(Object.entries(jsonPhaseStates ?? {}).map(([phase, jsonPhaseState]) => [phase, jsonPhaseState.dateTime !== undefined ?
+        {
+            ...jsonPhaseState,
+            dateTime: new Date(jsonPhaseState.dateTime)
+        } :
+        jsonPhaseState]));
 }
 
 /**
