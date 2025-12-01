@@ -6,7 +6,6 @@ import { parse as yamlParse } from "yaml";
 import secureConfigurationJSON from "../config/publish.secure.json";
 import type { Repository } from "./configuration";
 import { Publish } from "./publish";
-import { logger } from "./logger";
 
 /**
  * Configuration layout of publish.secure.json.
@@ -150,7 +149,7 @@ class PublishBeta extends Publish {
         const phaseStateStep = this.repositoryState.phaseState.step;
 
         if (phaseStateStep === undefined || phaseStateStep === step) {
-            logger.debug(`Running step ${step}`);
+            this.logger.debug(`Running step ${step}`);
 
             this.updatePhaseState({
                 step
@@ -162,7 +161,7 @@ class PublishBeta extends Publish {
                 step: undefined
             });
         } else {
-            logger.debug(`Skipping step ${step}`);
+            this.logger.debug(`Skipping step ${step}`);
         }
     }
 
@@ -173,7 +172,7 @@ class PublishBeta extends Publish {
      */
     private async validateWorkflow(): Promise<void> {
         if (this.dryRun) {
-            logger.info("Dry run: Validate workflow");
+            this.logger.info("Dry run: Validate workflow");
         } else {
             const commitSHA = this.run(true, true, "git", "rev-parse", this.repositoryState.branch)[0];
 
@@ -198,7 +197,7 @@ class PublishBeta extends Publish {
                         } else if (workflowRunID === -1) {
                             workflowRunID = workflowRun.id;
 
-                            logger.info(`Workflow run ID ${workflowRunID}`);
+                            this.logger.info(`Workflow run ID ${workflowRunID}`);
                         } else {
                             throw new Error(`Parallel workflow runs for SHA ${commitSHA}`);
                         }
@@ -262,7 +261,7 @@ class PublishBeta extends Publish {
             const tag = `v${repositoryState.packageConfiguration.version}`;
 
             if (repositoryState.phaseState.step !== undefined) {
-                logger.debug(`Repository failed at step "${repositoryState.phaseState.step}" on prior run`);
+                this.logger.debug(`Repository failed at step "${repositoryState.phaseState.step}" on prior run`);
             }
 
             const workflowsPath = ".github/workflows/";
@@ -271,20 +270,20 @@ class PublishBeta extends Publish {
             let hasReleaseWorkflow = false;
 
             if (fs.existsSync(workflowsPath)) {
-                logger.debug("Checking workflows");
+                this.logger.debug("Checking workflows");
 
                 for (const workflowFile of fs.readdirSync(workflowsPath).filter(workflowFile => workflowFile.endsWith(".yml"))) {
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Workflow configuration format is known.
                     const workflowOn = (yamlParse(fs.readFileSync(path.resolve(workflowsPath, workflowFile)).toString()) as WorkflowConfiguration).on;
 
                     if (workflowOn.push !== undefined && (workflowOn.push?.branches === undefined || workflowOn.push.branches.includes("v*"))) {
-                        logger.debug("Repository has push workflow");
+                        this.logger.debug("Repository has push workflow");
 
                         hasPushWorkflow = true;
                     }
 
                     if (workflowOn.release !== undefined && (workflowOn.release?.types === undefined || workflowOn.release.types.includes("published"))) {
-                        logger.debug("Repository has release workflow");
+                        this.logger.debug("Repository has release workflow");
 
                         hasReleaseWorkflow = true;
                     }
@@ -319,7 +318,7 @@ class PublishBeta extends Publish {
 
             await this.runStep("release", async () => {
                 if (this.dryRun) {
-                    logger.info("Dry run: Create release");
+                    this.logger.info("Dry run: Create release");
                 } else {
                     await this._octokit.rest.repos.createRelease({
                         owner: this.configuration.organization,
@@ -358,6 +357,4 @@ class PublishBeta extends Publish {
 }
 
 // Detailed syntax checking not required as this is an internal tool.
-await new PublishBeta(process.argv.includes("--dry-run")).publishAll().catch((e: unknown) => {
-    logger.error(e);
-});
+await new PublishBeta(process.argv.includes("--dry-run")).publishAll();

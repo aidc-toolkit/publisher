@@ -1,8 +1,8 @@
+import { type LogLevel, type LogLevels, omit, pick, propertyAs, type PropertyKeys } from "@aidc-toolkit/core";
 import fs from "node:fs";
+import type { Logger } from "tslog";
 import sharedConfigurationJSON from "../config/publish.json";
 import localConfigurationJSON from "../config/publish.local.json";
-import { logger, type LogLevels } from "./logger";
-import { omit, pick, propertyAs } from "./type-helper";
 
 export const SHARED_CONFIGURATION_PATH = "config/publish.json";
 export const LOCAL_CONFIGURATION_PATH = "config/publish.local.json";
@@ -163,7 +163,7 @@ interface LocalConfiguration {
     /**
      * Log level.
      */
-    readonly logLevel?: keyof typeof LogLevels;
+    readonly logLevel?: PropertyKeys<typeof LogLevels, LogLevel>;
 
     /**
      * Registry hosting organization's alpha repositories.
@@ -273,10 +273,13 @@ function toJSONPhaseStates(phaseStates: Readonly<Partial<Record<Phase, PhaseStat
  * @param configuration
  * Configuration.
  *
+ * @param logger
+ * Logger.
+ *
  * @param dryRun
  * If true, outputs to logger rather than file.
  */
-export function saveConfiguration(configuration: Configuration, dryRun: boolean): void {
+export function saveConfiguration(configuration: Configuration, logger: Logger<unknown>, dryRun: boolean): void {
     const jsonSharedConfiguration: JSONSharedConfiguration = {
         ...pick(configuration, "organization"),
         repositories: Object.fromEntries(Object.entries(configuration.repositories).map(([repositoryName, repository]) => [repositoryName, {

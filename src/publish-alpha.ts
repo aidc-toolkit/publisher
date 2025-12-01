@@ -1,7 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Repository } from "./configuration";
-import { logger } from "./logger";
 import { PACKAGE_CONFIGURATION_PATH, PACKAGE_LOCK_CONFIGURATION_PATH, Publish } from "./publish";
 
 const BACKUP_PACKAGE_CONFIGURATION_PATH = ".package.json";
@@ -165,7 +164,7 @@ class PublishAlpha extends Publish {
                         const [latestVersion] = this.run(true, true, "npm", "view", dependencyPackageName, "version");
 
                         if (latestVersion !== version.substring(1)) {
-                            logger.info(`Dependency ${dependencyPackageName}@${version} ${!this._updateAll ? "pending update" : "updating"} to version ${latestVersion}.`);
+                            this.logger.info(`Dependency ${dependencyPackageName}@${version} ${!this._updateAll ? "pending update" : "updating"} to version ${latestVersion}.`);
 
                             if (this._updateAll) {
                                 currentDependencies[dependencyPackageName] = `^${latestVersion}`;
@@ -184,7 +183,7 @@ class PublishAlpha extends Publish {
         }
 
         if (this._updateAll) {
-            logger.debug("Updating all dependencies");
+            this.logger.debug("Updating all dependencies");
 
             // Running this even if there are no dependency updates will update dependencies of dependencies.
             this.run(false, false, "npm", "update");
@@ -298,6 +297,4 @@ class PublishAlpha extends Publish {
 }
 
 // Detailed syntax checking not required as this is an internal tool.
-await new PublishAlpha(process.argv.includes("--update-all"), process.argv.includes("--dry-run")).publishAll().catch((e: unknown) => {
-    logger.error(e);
-});
+await new PublishAlpha(process.argv.includes("--update-all"), process.argv.includes("--dry-run")).publishAll();
