@@ -1,0 +1,85 @@
+{
+  "organization": "aidc-toolkit",
+  "repositories": {
+    "dev": {
+      "dependencyType": "external",
+      "phaseStates": {
+        "beta": {
+          "dateTime": "2025-11-28T20:07:33.000Z",
+          "tag": "v1.0.23-beta"
+        }
+      }
+    },
+    "core": {
+      "dependencyType": "external",
+      "phaseStates": {
+        "beta": {
+          "dateTime": "2025-11-28T20:08:16.000Z",
+          "tag": "v1.0.23-beta"
+        }
+      }
+    },
+    "utility": {
+      "dependencyType": "external",
+      "phaseStates": {
+        "beta": {
+          "dateTime": "2025-11-28T20:10:58.000Z",
+          "tag": "v1.0.23-beta"
+        }
+      }
+    },
+    "gs1": {
+      "dependencyType": "external",
+      "phaseStates": {
+        "beta": {
+          "dateTime": "2025-11-28T20:12:26.000Z",
+          "tag": "v1.0.23-beta"
+        }
+      }
+    },
+    "demo": {
+      "dependencyType": "none",
+      "phaseStates": {
+        "beta": {
+          "dateTime": "2025-11-28T20:12:30.000Z",
+          "tag": "v1.0.23-beta"
+        }
+      }
+    },
+    "app-extension": {
+      "dependencyType": "external",
+      "phaseStates": {
+        "beta": {
+          "dateTime": "2025-11-28T20:13:03.000Z",
+          "tag": "v1.0.23-beta"
+        }
+      }
+    },
+    "microsoft-add-in": {
+      "dependencyType": "none",
+      "phaseStates": {
+        "beta": {
+          "dateTime": "2025-11-28T20:13:09.000Z",
+          "tag": "v1.0.23-beta"
+        }
+      }
+    },
+    "aidc-toolkit.github.io": {
+      "directory": "doc",
+      "dependencyType": "none",
+      "phaseStates": {
+        "beta": {
+          "dateTime": "2025-11-28T20:16:43.000Z",
+          "tag": "v1.0.23-beta"
+        }
+      }
+    },
+    "publish": {
+      "dependencyType": "none",
+      "excludePaths": [
+        "config/publish.json"
+      ],
+      "phaseStates": {}
+    }
+  }
+}

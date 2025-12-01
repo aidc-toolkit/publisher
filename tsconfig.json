@@ -1,0 +1,3 @@
+{
+  "extends": "@aidc-toolkit/dev/tsconfig.json"
+}

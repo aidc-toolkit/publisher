@@ -1,0 +1,34 @@
+{
+  "name": "@aidc-toolkit/publish",
+  "version": "1.0.24-alpha",
+  "description": "Publication utility for AIDC Toolkit",
+  "type": "module",
+  "main": "dist/index.js",
+  "homepage": "https://aidc-toolkit.com/",
+  "repository": "aidc-toolkit/publish",
+  "bugs": {
+    "url": "https://github.com/aidc-toolkit/publish/issues"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Kevin Dean",
+    "email": "Kevin.Dean@datadevelopment.com",
+    "url": "https://www.linkedin.com/in/kdean"
+  },
+  "scripts": {
+    "lint": "eslint",
+    "publish-alpha": "tsx src/publish-alpha.ts $*",
+    "publish-beta": "tsx src/publish-beta.ts $*"
+  },
+  "devDependencies": {
+    "@aidc-toolkit/dev": "alpha",
+    "@octokit/types": "^16.0.0",
+    "@types/node": "^24.10.1",
+    "octokit": "^5.0.5",
+    "tslog": "^4.10.2",
+    "yaml": "^2.8.1"
+  },
+  "dependencies": {
+    "@aidc-toolkit/core": "alpha"
+  }
+}
