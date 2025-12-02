@@ -67,6 +67,9 @@
     "aidc-toolkit.github.io": {
       "directory": "doc",
       "dependencyType": "none",
+      "additionalDependencies": [
+        "demo"
+      ],
       "phaseStates": {
         "beta": {
           "dateTime": "2025-12-01T20:31:27.000Z",
