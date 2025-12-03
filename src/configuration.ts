@@ -1,4 +1,4 @@
-import { type LogLevels, omit, pick, propertyAs } from "@aidc-toolkit/core";
+import { type LogLevelKey, omit, pick, propertyAs } from "@aidc-toolkit/core";
 import fs from "node:fs";
 import type { Logger } from "tslog";
 import sharedConfigurationJSON from "../config/publish.json";
@@ -163,7 +163,7 @@ interface LocalConfiguration {
     /**
      * Log level.
      */
-    readonly logLevel?: keyof typeof LogLevels;
+    readonly logLevel?: LogLevelKey;
 
     /**
      * Registry hosting organization's alpha repositories.
@@ -233,7 +233,7 @@ export function loadConfiguration(): Configuration {
     return {
         ...jsonSharedConfiguration,
         ...omit(jsonLocalConfiguration, "logLevel"),
-        ...propertyAs<JSONLocalConfiguration, "logLevel", keyof typeof LogLevels>(jsonLocalConfiguration, "logLevel"),
+        ...propertyAs<JSONLocalConfiguration, "logLevel", LogLevelKey>(jsonLocalConfiguration, "logLevel"),
         repositories: Object.fromEntries(Object.entries(jsonSharedConfiguration.repositories).map(([repositoryName, jsonSharedRepository]) => {
             const jsonLocalRepository = jsonLocalConfiguration.repositories[repositoryName] ?? {};
 
