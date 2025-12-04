@@ -28,6 +28,6 @@
     "yaml": "^2.8.2"
   },
   "dependencies": {
-    "@aidc-toolkit/core": "1.0.25-alpha.202512041615"
+    "@aidc-toolkit/core": "1.0.25-alpha.202512041655"
   }
 }
