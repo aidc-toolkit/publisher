@@ -5,7 +5,9 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2025-12-01T20:23:14.000Z"
+          "dateTime": "2025-12-04T20:54:05.000Z",
+          "step": "complete",
+          "version": "1.0.25-beta"
         }
       }
     },
@@ -13,7 +15,9 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2025-12-01T20:23:59.000Z"
+          "dateTime": "2025-12-04T21:06:05.000Z",
+          "step": "complete",
+          "version": "1.0.25-beta"
         }
       }
     },
@@ -21,7 +25,9 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2025-12-01T20:26:05.000Z"
+          "dateTime": "2025-12-04T21:07:55.000Z",
+          "step": "complete",
+          "version": "1.0.25-beta"
         }
       }
     },
@@ -29,7 +35,9 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2025-12-01T20:27:14.000Z"
+          "dateTime": "2025-12-04T21:09:03.000Z",
+          "step": "complete",
+          "version": "1.0.25-beta"
         }
       }
     },
@@ -37,7 +45,8 @@
       "dependencyType": "none",
       "phaseStates": {
         "beta": {
-          "dateTime": "2025-12-01T20:27:19.000Z"
+          "dateTime": "2025-12-04T21:09:09.000Z",
+          "step": "complete"
         }
       }
     },
@@ -45,7 +54,9 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2025-12-01T20:27:55.000Z"
+          "dateTime": "2025-12-04T21:09:48.000Z",
+          "step": "complete",
+          "version": "1.0.25-beta"
         }
       }
     },
@@ -53,7 +64,8 @@
       "dependencyType": "none",
       "phaseStates": {
         "beta": {
-          "dateTime": "2025-12-01T20:28:01.000Z"
+          "dateTime": "2025-12-04T21:09:56.000Z",
+          "step": "complete"
         }
       }
     },
@@ -65,13 +77,15 @@
       ],
       "phaseStates": {
         "beta": {
-          "dateTime": "2025-12-01T20:31:27.000Z"
+          "dateTime": "2025-12-04T22:26:57.000Z",
+          "step": "complete"
         }
       }
     },
     "publish": {
       "dependencyType": "none",
       "excludePaths": [
+        "src/",
         "config/publish.json"
       ],
       "phaseStates": {
