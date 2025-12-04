@@ -6,7 +6,6 @@
       "phaseStates": {
         "beta": {
           "dateTime": "2025-12-04T20:54:05.000Z",
-          "step": "complete",
           "version": "1.0.25-beta"
         }
       }
@@ -16,7 +15,6 @@
       "phaseStates": {
         "beta": {
           "dateTime": "2025-12-04T21:06:05.000Z",
-          "step": "complete",
           "version": "1.0.25-beta"
         }
       }
@@ -26,7 +24,6 @@
       "phaseStates": {
         "beta": {
           "dateTime": "2025-12-04T21:07:55.000Z",
-          "step": "complete",
           "version": "1.0.25-beta"
         }
       }
@@ -36,7 +33,6 @@
       "phaseStates": {
         "beta": {
           "dateTime": "2025-12-04T21:09:03.000Z",
-          "step": "complete",
           "version": "1.0.25-beta"
         }
       }
@@ -45,8 +41,7 @@
       "dependencyType": "none",
       "phaseStates": {
         "beta": {
-          "dateTime": "2025-12-04T21:09:09.000Z",
-          "step": "complete"
+          "dateTime": "2025-12-04T21:09:09.000Z"
         }
       }
     },
@@ -55,7 +50,6 @@
       "phaseStates": {
         "beta": {
           "dateTime": "2025-12-04T21:09:48.000Z",
-          "step": "complete",
           "version": "1.0.25-beta"
         }
       }
@@ -64,8 +58,7 @@
       "dependencyType": "none",
       "phaseStates": {
         "beta": {
-          "dateTime": "2025-12-04T21:09:56.000Z",
-          "step": "complete"
+          "dateTime": "2025-12-04T21:09:56.000Z"
         }
       }
     },
@@ -77,8 +70,7 @@
       ],
       "phaseStates": {
         "beta": {
-          "dateTime": "2025-12-04T22:26:57.000Z",
-          "step": "complete"
+          "dateTime": "2025-12-04T22:26:57.000Z"
         }
       }
     },
@@ -90,7 +82,7 @@
       ],
       "phaseStates": {
         "beta": {
-          "dateTime": "2025-12-01T20:43:09.000Z"
+          "dateTime": "2025-12-04T22:34:56.000Z"
         }
       }
     }
