@@ -5,7 +5,7 @@ import { Octokit } from "octokit";
 import { parse as yamlParse } from "yaml";
 import secureConfigurationJSON from "../config/publish.secure.json";
 import type { Repository } from "./configuration";
-import { Publish, type RepositoryState } from "./publish";
+import { RunOptions, Publish, type RepositoryState } from "./publish";
 
 /**
  * Configuration layout of publish.secure.json.
@@ -87,25 +87,30 @@ class PublishBeta extends Publish {
      * @inheritDoc
      */
     protected dependencyVersionFor(dependencyRepositoryState: RepositoryState): string {
+        // Lock to version against which package was developed.
+        const phaseStateVersion = dependencyRepositoryState.phaseState.version;
+
+        if (phaseStateVersion === undefined) {
+            throw new Error(`*** Internal error *** Version not set for dependency ${dependencyRepositoryState.repositoryName}`);
+        }
+
         let dependencyVersion: string;
 
-        const dependencyPackageVersion = dependencyRepositoryState.packageConfiguration.version;
         const dependencyRepositoryName = dependencyRepositoryState.repositoryName;
-        const dependencyRepository = dependencyRepositoryState.repository;
+        const dependencyType = dependencyRepositoryState.repository.dependencyType;
 
-        switch (dependencyRepository.dependencyType) {
+        switch (dependencyType) {
             case "external":
-                // Lock to the version against which package was developed.
-                dependencyVersion = dependencyPackageVersion;
+                dependencyVersion = phaseStateVersion;
                 break;
 
             case "internal":
                 // Tag is the version preceded by 'v'.
-                dependencyVersion = `${this.configuration.organization}/${dependencyRepositoryName}#v${dependencyPackageVersion}`;
+                dependencyVersion = `${this.configuration.organization}/${dependencyRepositoryName}#v${phaseStateVersion}`;
                 break;
 
             default:
-                throw new Error(`Invalid dependency type "${dependencyRepository.dependencyType}" for dependency ${dependencyRepositoryName}`);
+                throw new Error(`Invalid dependency type "${dependencyType}" for dependency ${dependencyRepositoryName}`);
         }
 
         return dependencyVersion;
@@ -173,7 +178,7 @@ class PublishBeta extends Publish {
         if (this.dryRun) {
             this.logger.info("Dry run: Validate workflow");
         } else {
-            const commitSHA = this.run(true, true, "git", "rev-parse", this.repositoryState.branch)[0];
+            const commitSHA = this.run(RunOptions.RunAlways, true, "git", "rev-parse", this.repositoryState.branch)[0];
 
             let completed = false;
             let queryCount = 0;
@@ -239,10 +244,17 @@ class PublishBeta extends Publish {
 
             publish = true;
 
-            this.updatePackageVersion(undefined, undefined, undefined, "beta");
+            const version = this.updatePackageVersion(undefined, undefined, undefined, "beta");
+
+            if (repositoryState.repository.dependencyType !== "none") {
+                // Save version to be picked up by dependents.
+                this.updatePhaseState({
+                    version
+                });
+            }
 
             // Revert to default registry for organization.
-            this.run(false, false, "npm", "config", "delete", this.atOrganizationRegistry, "--location", "project");
+            this.run(RunOptions.SkipOnDryRun, false, "npm", "config", "delete", this.atOrganizationRegistry, "--location", "project");
         } else {
             const step = repositoryState.phaseState.step;
             const startingPublication = step === undefined;
@@ -294,7 +306,7 @@ class PublishBeta extends Publish {
             });
 
             await this.runStep("build", () => {
-                this.run(false, false, "npm", "run", "build:release", "--if-present");
+                this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "build:release", "--if-present");
             });
 
             await this.runStep("commit", () => {
@@ -302,11 +314,11 @@ class PublishBeta extends Publish {
             });
 
             await this.runStep("tag", () => {
-                this.run(false, false, "git", "tag", tag);
+                this.run(RunOptions.SkipOnDryRun, false, "git", "tag", tag);
             });
 
             await this.runStep("push", () => {
-                this.run(false, false, "git", "push", "--atomic", "origin", repositoryState.branch, tag);
+                this.run(RunOptions.ParameterizeOnDryRun, false, "git", "push", "--atomic", "origin", repositoryState.branch, tag);
             });
 
             if (hasPushWorkflow) {

@@ -22,6 +22,11 @@ export interface PhaseState {
     dateTime?: Date;
 
     /**
+     * Version; used by dependents.
+     */
+    version?: string | undefined;
+
+    /**
      * Current step in publication; used to resume after failure recovery.
      */
     step?: string | undefined;

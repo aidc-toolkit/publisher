@@ -113,6 +113,36 @@ export interface RepositoryState {
 }
 
 /**
+ * Run options.
+ */
+export const RunOptions = {
+    /**
+     * Run always.
+     */
+    RunAlways: 0,
+
+    /**
+     * Skip if in dry run mode.
+     */
+    SkipOnDryRun: 1,
+
+    /**
+     * Run command with "--dry-run" parameter if in dry run mode.
+     */
+    ParameterizeOnDryRun: 2
+} as const;
+
+/**
+ * Run option key.
+ */
+export type RunOptionKey = keyof typeof RunOptions;
+
+/**
+ * Run option.
+ */
+export type RunOption = typeof RunOptions[RunOptionKey];
+
+/**
  * Publish base class.
  */
 export abstract class Publish {
@@ -316,8 +346,8 @@ export abstract class Publish {
     /**
      * Run a command and optionally capture its output.
      *
-     * @param ignoreDryRun
-     * If true, dry run setting is ignored.
+     * @param runOption
+     * Run option; applies only if in dry run mode.
      *
      * @param captureOutput
      * If true, output is captured and returned.
@@ -331,23 +361,26 @@ export abstract class Publish {
      * @returns
      * Output if captured or empty array if not.
      */
-    protected run(ignoreDryRun: boolean, captureOutput: boolean, command: string, ...args: string[]): string[] {
-        if (!ignoreDryRun && captureOutput) {
-            throw new Error("Cannot capture output in dry run");
+    protected run(runOption: RunOption, captureOutput: boolean, command: string, ...args: string[]): string[] {
+        // Ignore run option if not in dry run mode.
+        const effectiveRunOption = !this.dryRun ? RunOptions.RunAlways : runOption;
+
+        if (effectiveRunOption === RunOptions.SkipOnDryRun && captureOutput) {
+            throw new Error("Cannot capture output in dry run mode");
         }
 
         let output: string[];
 
         const runningCommand = `Running command "${command}" with arguments [${args.join(", ")}].`;
 
-        if (this.dryRun && !ignoreDryRun) {
+        if (effectiveRunOption === RunOptions.SkipOnDryRun) {
             this.logger.info(`Dry run: ${runningCommand}`);
 
             output = [];
         } else {
             this.logger.debug(runningCommand);
 
-            const spawnResult = spawnSync(command, args, {
+            const spawnResult = spawnSync(command, effectiveRunOption !== RunOptions.ParameterizeOnDryRun ? args : [...args, "--dry-run"], {
                 stdio: ["inherit", captureOutput ? "pipe" : "inherit", "inherit"]
             });
 
@@ -490,14 +523,14 @@ export abstract class Publish {
             }
         }
 
-        if (this.phase !== "alpha" && this.run(true, true, "git", "fetch", "--porcelain", "--dry-run").length !== 0) {
+        if (this.phase !== "alpha" && this.run(RunOptions.RunAlways, true, "git", "fetch", "--porcelain", "--dry-run").length !== 0) {
             throw new Error("Remote repository has outstanding changes");
         }
 
         // Phase date/time is undefined if never before published.
         if (phaseDateTime !== undefined) {
             // Get all files committed since last published.
-            for (const line of this.run(true, true, "git", "log", "--since", phaseDateTime.toISOString(), "--name-status", "--pretty=oneline")) {
+            for (const line of this.run(RunOptions.RunAlways, true, "git", "log", "--since", phaseDateTime.toISOString(), "--name-status", "--pretty=oneline")) {
                 // Header starts with 40-character SHA.
                 if (/^[0-9a-f]{40} /.test(line)) {
                     logger.debug(`Commit SHA ${line.substring(0, 40)}`);
@@ -509,7 +542,7 @@ export abstract class Publish {
             }
 
             // Get all uncommitted files.
-            const output = this.run(true, true, "git", "status", "--porcelain");
+            const output = this.run(RunOptions.RunAlways, true, "git", "status", "--porcelain");
 
             if (output.length !== 0) {
                 const committedCount = changedFilesSet.size;
@@ -574,7 +607,7 @@ export abstract class Publish {
         if (files.length === 0) {
             modifiedFiles.push("--all");
         } else {
-            for (const line of this.run(true, true, "git", "status", ...files, "--porcelain")) {
+            for (const line of this.run(RunOptions.RunAlways, true, "git", "status", ...files, "--porcelain")) {
                 const status = line.substring(0, 2);
                 const modifiedFile = line.substring(3);
 
@@ -588,7 +621,7 @@ export abstract class Publish {
         }
 
         if (modifiedFiles.length !== 0) {
-            this.run(false, false, "git", "commit", ...modifiedFiles, "--message", message);
+            this.run(RunOptions.ParameterizeOnDryRun, false, "git", "commit", ...modifiedFiles, "--message", message);
         }
     }
 
@@ -619,8 +652,11 @@ export abstract class Publish {
      *
      * @param preReleaseIdentifier
      * Pre-release identifier or undefined if no change.
+     *
+     * @returns
+     * Updated package version.
      */
-    protected updatePackageVersion(majorVersion: number | undefined, minorVersion: number | undefined, patchVersion: number | undefined, preReleaseIdentifier: string | null | undefined): void {
+    protected updatePackageVersion(majorVersion: number | undefined, minorVersion: number | undefined, patchVersion: number | undefined, preReleaseIdentifier: string | null | undefined): string {
         const repositoryState = this.repositoryState;
 
         if (majorVersion !== undefined) {
@@ -639,9 +675,13 @@ export abstract class Publish {
             repositoryState.preReleaseIdentifier = preReleaseIdentifier;
         }
 
-        repositoryState.packageConfiguration.version = `${repositoryState.majorVersion}.${repositoryState.minorVersion}.${repositoryState.patchVersion}${repositoryState.preReleaseIdentifier !== null ? `-${repositoryState.preReleaseIdentifier}` : ""}`;
+        const version = `${repositoryState.majorVersion}.${repositoryState.minorVersion}.${repositoryState.patchVersion}${repositoryState.preReleaseIdentifier !== null ? `-${repositoryState.preReleaseIdentifier}` : ""}`;
+
+        repositoryState.packageConfiguration.version = version;
 
         this.savePackageConfiguration();
+
+        return version;
     }
 
     /**
@@ -652,7 +692,7 @@ export abstract class Publish {
 
         this.logger.debug(`Updating organization dependencies [${repositoryState.allDependencyPackageNames.join(", ")}]`);
 
-        this.run(false, false, "npm", "update", ...repositoryState.allDependencyPackageNames);
+        this.run(RunOptions.ParameterizeOnDryRun, false, "npm", "update", ...repositoryState.allDependencyPackageNames);
     }
 
     /**
@@ -737,7 +777,7 @@ export abstract class Publish {
                     try {
                         const phaseDateTime = this.getPhaseDateTime(repository, phaseState.dateTime);
 
-                        const branch = this.run(true, true, "git", "branch", "--show-current")[0];
+                        const branch = this.run(RunOptions.RunAlways, true, "git", "branch", "--show-current")[0];
 
                         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Package configuration format is known.
                         const packageConfiguration = JSON.parse(fs.readFileSync(PACKAGE_CONFIGURATION_PATH).toString()) as PackageConfiguration;
@@ -759,6 +799,7 @@ export abstract class Publish {
                         const allDependencyPackageNames: string[] = [];
 
                         let anyDependenciesUpdated = false;
+                        let savePackageConfigurationPending = false;
 
                         for (const dependencies of [packageConfiguration.devDependencies ?? {}, packageConfiguration.dependencies ?? {}]) {
                             for (const dependencyPackageName of Object.keys(dependencies)) {
@@ -770,7 +811,11 @@ export abstract class Publish {
 
                                     // Check every dependency for logging purposes.
                                     if (this.isOrganizationDependencyUpdated(phaseDateTime, dependencyRepositoryName, false)) {
+                                        // Update dependency version to match latest update.
+                                        dependencies[dependencyPackageName] = this.dependencyVersionFor(this._repositoryStates[dependencyRepositoryName]);
+
                                         anyDependenciesUpdated = true;
+                                        savePackageConfigurationPending = true;
                                     }
 
                                     for (const dependencyDependencyPackageName of this.repositoryStates[dependencyRepositoryName].allDependencyPackageNames) {
@@ -785,9 +830,6 @@ export abstract class Publish {
 
                                     // Current dependency package name goes in last to preserve hierarchy.
                                     allDependencyPackageNames.push(dependencyPackageName);
-
-                                    // Dependency changes will ultimately be discarded if there are no changes and no updates to repository states.
-                                    dependencies[dependencyPackageName] = this.dependencyVersionFor(this._repositoryStates[dependencyRepositoryName]);
                                 }
                             }
                         }
@@ -851,7 +893,13 @@ export abstract class Publish {
 
                                 this.updatePackageVersion(branchMajorVersion, branchMinorVersion, 0, null);
                                 this.commitUpdatedPackageVersion(PACKAGE_CONFIGURATION_PATH);
+
+                                savePackageConfigurationPending = false;
                             }
+                        }
+
+                        if (savePackageConfigurationPending) {
+                            this.savePackageConfiguration();
                         }
 
                         // eslint-disable-next-line no-await-in-loop -- Next iteration requires previous to finish.
@@ -865,7 +913,7 @@ export abstract class Publish {
 
                         this.saveConfiguration();
                     }
-                    // Non-external repositories may be private and not accessible to all developers.
+                // Non-external repositories may be private and not accessible to all developers.
                 } else if (repository.dependencyType === "external") {
                     throw new Error(`Repository ${repositoryName} not found`);
                 }
