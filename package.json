@@ -27,7 +27,6 @@
   "devDependencies": {
     "@aidc-toolkit/dev": "1.0.25-alpha.202512051624",
     "@octokit/types": "^16.0.0",
-    "@types/node": "^24.10.1",
     "octokit": "^5.0.5",
     "yaml": "^2.8.2"
   },
