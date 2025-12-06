@@ -506,9 +506,37 @@ export abstract class Publish {
          * New file name if status is "R", undefined otherwise.
          */
         function processChangedFile(status: string, file: string, newFile: string | undefined): void {
+            if (!/[ AMDR]{1,2}/.test(status)) {
+                throw new Error(`Unknown status "${status}"`);
+            }
+
+            let resolvedStatus: string;
+
+            if (status.length === 1) {
+                resolvedStatus = status;
+            } else {
+                const indexStatus = status.charAt(0);
+                const workingTreeStatus = status.charAt(1);
+
+                if (indexStatus === " ") {
+                    resolvedStatus = workingTreeStatus;
+                } else if (workingTreeStatus === " ") {
+                    resolvedStatus = indexStatus;
+                } else if (workingTreeStatus === "D") {
+                    // Deleted from working tree takes precedence.
+                    resolvedStatus = "D";
+                } else if (indexStatus === "A") {
+                    // Added to working tree takes precedence.
+                    resolvedStatus = "A";
+                } else {
+                    // Only options left are modified and renamed.
+                    resolvedStatus = indexStatus;
+                }
+            }
+
             // Status is "D" if deleted, "R" if renamed.
-            const deleteFile = status === "D" || status === "R" ? file : undefined;
-            const addFile = status === "R" ? newFile : status !== "D" ? file : undefined;
+            const deleteFile = resolvedStatus === "D" || resolvedStatus === "R" ? file : undefined;
+            const addFile = resolvedStatus === "R" ? newFile : resolvedStatus !== "D" ? file : undefined;
 
             // Remove deleted file; anything that depends on a deleted file will have been modified.
             if (deleteFile !== undefined && changedFilesSet.delete(deleteFile)) {
@@ -542,7 +570,7 @@ export abstract class Publish {
                 } else {
                     const [status, file, newFile] = line.split("\t");
 
-                    processChangedFile(status.charAt(0), file, newFile);
+                    processChangedFile(status, file, newFile);
                 }
             }
 
