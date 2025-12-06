@@ -196,6 +196,8 @@ class PublishAlpha extends Publish {
             const switchToAlpha = repositoryState.preReleaseIdentifier !== "alpha";
 
             if (switchToAlpha) {
+                this.updatePackageVersion(undefined, undefined, repositoryState.patchVersion + 1, "alpha");
+
                 // Use specified registry for organization until no longer in alpha mode.
                 this.run(RunOptions.SkipOnDryRun, false, "npm", "config", "set", this.atOrganizationRegistry, "--location", "project");
             }
