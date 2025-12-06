@@ -1,12 +1,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import process from "node:process";
-import type { Repository } from "./configuration";
+import type { Repository } from "./configuration.js";
 import {
     Publish,
     type RepositoryState,
     RunOptions
-} from "./publish";
+} from "./publish.js";
 
 /**
  * Publish alpha versions.

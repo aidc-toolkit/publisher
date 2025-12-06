@@ -11,7 +11,7 @@ import {
     type Repository,
     saveConfiguration,
     SHARED_CONFIGURATION_PATH
-} from "./configuration";
+} from "./configuration.js";
 
 export const PACKAGE_CONFIGURATION_PATH = "package.json";
 

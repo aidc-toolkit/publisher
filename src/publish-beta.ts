@@ -3,9 +3,9 @@ import * as path from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { Octokit } from "octokit";
 import { parse as yamlParse } from "yaml";
-import secureConfigurationJSON from "../config/publish.secure.json";
-import type { Repository } from "./configuration";
-import { Publish, type RepositoryState, RunOptions } from "./publish";
+import secureConfigurationJSON from "../config/publish.secure.json" with { type: "json" };
+import type { Repository } from "./configuration.js";
+import { Publish, type RepositoryState, RunOptions } from "./publish.js";
 
 /**
  * Configuration layout of publish.secure.json.
