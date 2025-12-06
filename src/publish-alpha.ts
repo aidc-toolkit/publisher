@@ -1,9 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import process from "node:process";
 import type { Repository } from "./configuration";
 import {
-    PACKAGE_CONFIGURATION_PATH,
-    PACKAGE_LOCK_CONFIGURATION_PATH,
     Publish,
     type RepositoryState,
     RunOptions
@@ -284,8 +283,6 @@ class PublishAlpha extends Publish {
                     this.updatePackageVersion(undefined, undefined, undefined, "alpha");
                 }
             }
-
-            this.commitModified("Published alpha release.", PACKAGE_CONFIGURATION_PATH, PACKAGE_LOCK_CONFIGURATION_PATH);
 
             this.updatePhaseState({
                 dateTime: new Date()
