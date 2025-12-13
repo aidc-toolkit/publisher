@@ -847,16 +847,16 @@ export abstract class Publish {
 
         const version = packageConfiguration.version;
 
-        const parsedVersion = /^(\d+)\.(\d+)\.(\d+)(-(alpha|beta))?$/.exec(version);
+        const parsedVersionGroups = /^(?<majorVersion>\d+)\.(?<minorVersion>\d+)\.(?<patchVersion>\d+)(?:-(?<preReleaseIdentifier>alpha|beta))?$/.exec(version)?.groups;
 
-        if (parsedVersion === null) {
+        if (parsedVersionGroups === undefined) {
             throw new Error(`Invalid package version ${version}`);
         }
 
-        const majorVersion = Number(parsedVersion[1]);
-        const minorVersion = Number(parsedVersion[2]);
-        const patchVersion = Number(parsedVersion[3]);
-        const preReleaseIdentifier = parsedVersion.length === 6 ? parsedVersion[5] : null;
+        const majorVersion = Number(parsedVersionGroups["majorVersion"]);
+        const minorVersion = Number(parsedVersionGroups["minorVersion"]);
+        const patchVersion = Number(parsedVersionGroups["patchVersion"]);
+        const preReleaseIdentifier = parsedVersionGroups["preReleaseIdentifier"] ?? null;
 
         const allDependencyRepositoryNames: string[] = [];
         const updatedDependencyPackageNames: string[] = [];
@@ -944,12 +944,12 @@ export abstract class Publish {
             throw new Error(`Branch ${branch} is not valid for ${this.phase} phase`);
         }
 
-        const parsedBranch = /^v(\d+)\.(\d+)/.exec(branch);
+        const parsedBranchGroups = /^v(?<branchMajorVersion>\d+)\.(?<branchMinorVersion>\d+)/.exec(branch)?.groups;
 
         // If this is a version branch, update the package version if required.
-        if (parsedBranch !== null) {
-            const branchMajorVersion = Number(parsedBranch[1]);
-            const branchMinorVersion = Number(parsedBranch[2]);
+        if (parsedBranchGroups !== undefined) {
+            const branchMajorVersion = Number(parsedBranchGroups["branchMajorVersion"]);
+            const branchMinorVersion = Number(parsedBranchGroups["branchMinorVersion"]);
 
             // If in a version branch and version doesn't match, update it.
             if (majorVersion !== branchMajorVersion || minorVersion !== branchMinorVersion) {
