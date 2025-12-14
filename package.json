@@ -1,6 +1,6 @@
 {
   "name": "@aidc-toolkit/publish",
-  "version": "1.0.29-alpha",
+  "version": "1.0.31-alpha",
   "description": "Publication utility for AIDC Toolkit",
   "type": "module",
   "private": true,
@@ -25,12 +25,12 @@
     "publish-beta": "tsx src/publish-beta.ts $*"
   },
   "devDependencies": {
-    "@aidc-toolkit/dev": "1.0.29-alpha.202512141514",
+    "@aidc-toolkit/dev": "1.0.31-alpha.202512141820",
     "@octokit/types": "^16.0.0",
     "octokit": "^5.0.5",
     "yaml": "^2.8.2"
   },
   "dependencies": {
-    "@aidc-toolkit/core": "1.0.29-alpha.202512141515"
+    "@aidc-toolkit/core": "1.0.31-alpha.202512141820"
   }
 }
