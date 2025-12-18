@@ -155,7 +155,7 @@ class PublishAlpha extends Publish {
      * @inheritDoc
      */
     protected async publish(): Promise<void> {
-        let anyExternalUpdates = false;
+        let savePackageConfigurationPending = false;
 
         const repositoryPublishState = this.repositoryPublishState;
         const packageConfiguration = repositoryPublishState.packageConfiguration;
@@ -174,7 +174,7 @@ class PublishAlpha extends Publish {
                             if (this.#updateAll) {
                                 currentDependencies[dependencyPackageName] = `^${latestVersion}`;
 
-                                anyExternalUpdates = true;
+                                savePackageConfigurationPending = true;
                             }
                         }
                     }
@@ -182,10 +182,7 @@ class PublishAlpha extends Publish {
             }
         }
 
-        if (anyExternalUpdates) {
-            this.logger.debug("Updating external dependencies");
-            
-            // Save the package configuration; this will install all the updates and be detected by the call to anyChanges().
+        if (savePackageConfigurationPending) {
             this.savePackageConfiguration();
         }
 
@@ -199,6 +196,9 @@ class PublishAlpha extends Publish {
 
                 this.updatePackageVersion(undefined, undefined, repositoryPublishState.patchVersion + 1, "alpha");
             }
+
+            // Update the package lock configuration to pick up any changes prior to this point.
+            this.updatePackageLockConfiguration();
 
             // Run lint if present.
             this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "lint", "--if-present");

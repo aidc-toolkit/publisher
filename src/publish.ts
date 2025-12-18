@@ -1,4 +1,4 @@
-import { getLogger, pick } from "@aidc-toolkit/core";
+import { getLogger, pick, type Promisable } from "@aidc-toolkit/core";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as process from "node:process";
@@ -678,7 +678,12 @@ export abstract class Publish {
         } else {
             fs.writeFileSync(PACKAGE_CONFIGURATION_PATH, `${JSON.stringify(packageConfiguration, null, 2)}\n`);
         }
+    }
 
+    /**
+     * Update package lock configuration.
+     */
+    protected updatePackageLockConfiguration(): void {
         // Run "npm install" to update package configuration lock file.
         this.run(RunOptions.ParameterizeOnDryRun, false, "npm", "install");
     }
@@ -897,7 +902,7 @@ export abstract class Publish {
     /**
      * Publish current repository.
      */
-    protected abstract publish(): void | Promise<void>;
+    protected abstract publish(): Promisable<void>;
 
     /**
      * Publish all repositories.

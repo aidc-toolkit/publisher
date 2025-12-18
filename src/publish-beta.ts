@@ -52,7 +52,7 @@ interface WorkflowConfiguration {
 /**
  * Publish steps.
  */
-type Step = "build" | "commit" | "tag" | "push" | "workflow (push)" | "release" | "workflow (release)";
+type Step = "install" | "build" | "commit" | "tag" | "push" | "workflow (push)" | "release" | "workflow (release)";
 
 /**
  * Publish beta versions.
@@ -277,6 +277,10 @@ class PublishBeta extends Publish {
                 }
             }
         }
+
+        await this.#runStep("install", () => {
+            this.updatePackageLockConfiguration();
+        });
 
         await this.#runStep("build", () => {
             this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "build:release", "--if-present");
