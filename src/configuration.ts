@@ -41,15 +41,21 @@ interface JSONPhaseState extends Omit<Readonly<PhaseState>, "dateTime"> {
  * Dependency type.
  *
  * - external
+ *   - External (public) dependency of one or more other repositories
  *   - Installed from NPM
  * - internal
+ *   - Internal (private) dependency of one or more other repositories
  *   - Installed from GitHub
  *   - May require "prepare" script( https://docs.npmjs.com/cli/using-npm/scripts)
- *   - May require authentication with GitHub
- * - none
- *   - Not a dependency of any other repository
+ *   - May require GitHub authentication
+ * - application
+ *   - Published application
+ * - helper
+ *   - Internal helper
+ *   - Not subject to normal publication process
+ *   - May exist on any branch, but primarily on main
  */
-export type DependencyType = "external" | "internal" | "none";
+export type DependencyType = "external" | "internal" | "application" | "helper";
 
 /**
  * Shared repository configuration.
@@ -101,6 +107,11 @@ interface JSONSharedRepository extends Omit<Readonly<SharedRepository>, "depende
  */
 interface LocalRepository {
     /**
+     * Working version of local repository (major and minor versions only).
+     */
+    workingVersion: string;
+
+    /**
      * Alpha phase state.
      */
     readonly phaseStates?: Readonly<Partial<Record<"alpha", PhaseState>>>;
@@ -130,6 +141,12 @@ export interface Repository extends SharedRepository, LocalRepository {
  * Shared configuration.
  */
 interface SharedConfiguration {
+    /**
+     * Ordered list of versions. Each version's branch can only be pushed to the next; only the last can be pushed to
+     * main.
+     */
+    readonly versions: string[];
+
     /**
      * Organization that owns the repositories.
      */
@@ -271,7 +288,9 @@ export function loadConfiguration(): Configuration {
         ...propertyAs<JSONLocalConfiguration, "logLevel", LogLevelKey>(jsonLocalConfiguration, "logLevel"),
         ...propertyAs<JSONLocalConfiguration, "publishState", PublishState>(jsonLocalConfiguration, "publishState"),
         repositories: Object.fromEntries(Object.entries(jsonSharedConfiguration.repositories).map(([repositoryName, jsonSharedRepository]) => {
-            const jsonLocalRepository = jsonLocalConfiguration.repositories[repositoryName] ?? {};
+            const jsonLocalRepository = jsonLocalConfiguration.repositories[repositoryName] ?? {
+                workingVersion: ""
+            };
 
             return [repositoryName, {
                 ...jsonSharedRepository,
@@ -317,9 +336,9 @@ function toJSONPhaseStates(phaseStates: Readonly<Partial<Record<Phase, PhaseStat
  * @param dryRun
  * If true, outputs to logger rather than file.
  */
-export function saveConfiguration(configuration: Configuration, logger: Logger<unknown>, dryRun: boolean): void {
+export function saveConfiguration(configuration: Configuration, logger: Logger<object>, dryRun: boolean): void {
     const jsonSharedConfiguration: JSONSharedConfiguration = {
-        ...pick(configuration, "organization"),
+        ...pick(configuration, "versions", "organization"),
         repositories: Object.fromEntries(Object.entries(configuration.repositories).map(([repositoryName, repository]) => [repositoryName, {
             ...pick(repository, "directory", "dependencyType", "additionalDependencies", "excludePaths"),
             phaseStates: toJSONPhaseStates(pick(repository.phaseStates, "beta", "production"))
@@ -329,7 +348,7 @@ export function saveConfiguration(configuration: Configuration, logger: Logger<u
     const jsonLocalConfiguration: JSONLocalConfiguration = {
         ...pick(configuration, "logLevel", "alphaRegistry", "publishState"),
         repositories: Object.fromEntries(Object.entries(configuration.repositories).map(([repositoryName, repository]) => [repositoryName, {
-            ...pick(repository),
+            ...pick(repository, "workingVersion"),
             phaseStates: toJSONPhaseStates(pick(repository.phaseStates, "alpha"))
         }]))
     };

@@ -133,8 +133,8 @@ class PublishBeta extends Publish {
     protected isValidBranch(): boolean {
         const repositoryPublishState = this.repositoryPublishState;
 
-        // Branch for beta phase must match version.
-        return repositoryPublishState.branch === `v${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}`;
+        // Branch for beta phase must match version for anything other than helper repository.
+        return repositoryPublishState.repository.dependencyType === "helper" || repositoryPublishState.branch === `v${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}`;
     }
 
     /**
@@ -232,7 +232,7 @@ class PublishBeta extends Publish {
 
             const version = this.updatePackageVersion(undefined, undefined, undefined, "beta");
 
-            if (repositoryPublishState.repository.dependencyType !== "none") {
+            if (repositoryPublishState.repository.dependencyType === "external" || repositoryPublishState.repository.dependencyType === "internal") {
                 // Save version to be picked up by dependents.
                 this.updatePhaseState({
                     version
@@ -290,9 +290,12 @@ class PublishBeta extends Publish {
             this.commitUpdatedPackageVersion();
         });
 
-        await this.#runStep("tag", () => {
-            this.run(RunOptions.SkipOnDryRun, false, "git", "tag", tag);
-        });
+        // Helper repositories don't use tags.
+        if (repositoryPublishState.repository.dependencyType !== "helper") {
+            await this.#runStep("tag", () => {
+                this.run(RunOptions.SkipOnDryRun, false, "git", "tag", tag);
+            });
+        }
 
         await this.#runStep("push", () => {
             this.run(RunOptions.ParameterizeOnDryRun, false, "git", "push", "--atomic", "origin", repositoryPublishState.branch, tag);
@@ -304,24 +307,27 @@ class PublishBeta extends Publish {
             });
         }
 
-        await this.#runStep("release", async () => {
-            if (this.dryRun) {
-                this.logger.info("Dry run: Create release");
-            } else {
-                await this.#octokit.rest.repos.createRelease({
-                    owner: this.configuration.organization,
-                    repo: repositoryPublishState.repositoryName,
-                    tag_name: tag,
-                    name: `Release ${tag}`,
-                    prerelease: true
+        // Helper repositories don't publish releases.
+        if (repositoryPublishState.repository.dependencyType !== "helper") {
+            await this.#runStep("release", async () => {
+                if (this.dryRun) {
+                    this.logger.info("Dry run: Create release");
+                } else {
+                    await this.#octokit.rest.repos.createRelease({
+                        owner: this.configuration.organization,
+                        repo: repositoryPublishState.repositoryName,
+                        tag_name: tag,
+                        name: `Release ${tag}`,
+                        prerelease: true
+                    });
+                }
+            });
+
+            if (hasReleaseWorkflow) {
+                await this.#runStep("workflow (release)", async () => {
+                    await this.#validateWorkflow();
                 });
             }
-        });
-
-        if (hasReleaseWorkflow) {
-            await this.#runStep("workflow (release)", async () => {
-                await this.#validateWorkflow();
-            });
         }
 
         this.updatePhaseState({

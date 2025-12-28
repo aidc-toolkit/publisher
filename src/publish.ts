@@ -101,7 +101,7 @@ export interface RepositoryPublishState {
     /**
      * True if any dependencies, including additional, have been updated.
      */
-    readonly anyDependenciesUpdated: boolean;
+    anyDependenciesUpdated: boolean;
 }
 
 /**
@@ -154,6 +154,11 @@ export abstract class Publish {
     readonly #configuration: Configuration;
 
     /**
+     * Latest version.
+     */
+    readonly #latestVersion: string;
+
+    /**
      * Publish state, same as in configuration but always defined during publication.
      */
     readonly #publishState: PublishState;
@@ -161,7 +166,7 @@ export abstract class Publish {
     /**
      * Logger.
      */
-    readonly #logger: Logger<unknown>;
+    readonly #logger: Logger<object>;
 
     /**
      * At organization.
@@ -192,7 +197,8 @@ export abstract class Publish {
         this.#dryRun = dryRun;
 
         this.#configuration = loadConfiguration();
-        
+        this.#latestVersion = this.#configuration.versions[this.configuration.versions.length - 1];
+
         if (this.#configuration.publishState === undefined) {
             this.#publishState = {
                 phase
@@ -238,6 +244,13 @@ export abstract class Publish {
     }
 
     /**
+     * Get the latest version.
+     */
+    get latestVersion(): string {
+        return this.#latestVersion;
+    }
+
+    /**
      * Get the publish state.
      */
     get publishState(): PublishState {
@@ -247,7 +260,7 @@ export abstract class Publish {
     /**
      * Get the logger.
      */
-    protected get logger(): Logger<unknown> {
+    protected get logger(): Logger<object> {
         return this.#logger;
     }
 
@@ -799,7 +812,7 @@ export abstract class Publish {
         if (phaseState === undefined) {
             phaseState = {};
 
-            // eslint-disable-next-line no-param-reassign -- Repository is necessarily updated as part of building repository phase state.
+            // eslint-disable-next-line no-param-reassign -- Repository is necessarily updated as part of building publish state.
             repository.phaseStates[this.phase] = phaseState;
         }
 
@@ -823,38 +836,6 @@ export abstract class Publish {
         const patchVersion = Number(parsedVersionGroups["patchVersion"]);
         const preReleaseIdentifier = parsedVersionGroups["preReleaseIdentifier"] ?? null;
 
-        let anyDependenciesUpdated = false;
-
-        for (const dependencies of [packageConfiguration.devDependencies ?? {}, packageConfiguration.dependencies ?? {}]) {
-            for (const dependencyPackageName of Object.keys(dependencies)) {
-                const dependencyRepositoryName = this.dependencyRepositoryName(dependencyPackageName);
-
-                // Dependency repository name is null if dependency is not within the organization.
-                if (dependencyRepositoryName !== null) {
-                    this.logger.trace(`Organization dependency ${dependencyPackageName} from package configuration`);
-
-                    if (this.#isOrganizationDependencyUpdated(phaseDateTime, dependencyRepositoryName, false)) {
-                        // Update dependency version to match latest update.
-                        dependencies[dependencyPackageName] = this.dependencyVersionFor(dependencyRepositoryName);
-
-                        anyDependenciesUpdated = true;
-                    }
-                }
-            }
-        }
-
-        let savePackageConfigurationPending = anyDependenciesUpdated;
-
-        if (repository.additionalDependencies !== undefined) {
-            for (const additionalDependencyRepositoryName of repository.additionalDependencies) {
-                this.logger.trace(`Organization dependency ${this.getPackageName(additionalDependencyRepositoryName)} from additional dependencies`);
-
-                if (this.#isOrganizationDependencyUpdated(phaseDateTime, additionalDependencyRepositoryName, true)) {
-                    anyDependenciesUpdated = true;
-                }
-            }
-        }
-
         this.#repositoryPublishState = {
             repositoryName,
             repository,
@@ -866,14 +847,17 @@ export abstract class Publish {
             minorVersion,
             patchVersion,
             preReleaseIdentifier,
-            anyDependenciesUpdated
+            anyDependenciesUpdated: false
         };
 
         if (!this.isValidBranch()) {
             throw new Error(`Branch ${branch} is not valid for ${this.phase} phase`);
         }
 
-        const parsedBranchGroups = /^v(?<branchMajorVersion>\d+)\.(?<branchMinorVersion>\d+)/.exec(branch)?.groups;
+        const parsedBranchGroups = /^v(?<branchMajorVersion>\d+)\.(?<branchMinorVersion>\d+)/.exec(
+            // Helper repositories are always on the latest version branch.
+            repository.dependencyType !== "helper" ? branch : `v${this.latestVersion}`
+        )?.groups;
 
         // If this is a version branch, update the package version if required.
         if (parsedBranchGroups !== undefined) {
@@ -888,14 +872,42 @@ export abstract class Publish {
 
                 this.updatePackageVersion(branchMajorVersion, branchMinorVersion, 0, null);
                 this.commitUpdatedPackageVersion(PACKAGE_CONFIGURATION_PATH);
-
-                // Updating the package version will cause the package configuration to be saved.
-                savePackageConfigurationPending = false;
             }
         }
 
-        if (savePackageConfigurationPending) {
+        // eslint-disable-next-line no-param-reassign -- Repository is necessarily updated as part of building publish state.
+        repository.workingVersion = `${majorVersion}.${minorVersion}`;
+
+        for (const dependencies of [packageConfiguration.devDependencies ?? {}, packageConfiguration.dependencies ?? {}]) {
+            for (const dependencyPackageName of Object.keys(dependencies)) {
+                const dependencyRepositoryName = this.dependencyRepositoryName(dependencyPackageName);
+
+                // Dependency repository name is null if dependency is not within the organization; ignore if working versions are different.
+                if (dependencyRepositoryName !== null && this.configuration.repositories[dependencyRepositoryName].workingVersion === repository.workingVersion) {
+                    this.logger.trace(`Organization dependency ${dependencyPackageName} from package configuration`);
+
+                    if (this.#isOrganizationDependencyUpdated(phaseDateTime, dependencyRepositoryName, false)) {
+                        // Update dependency version to match latest update.
+                        dependencies[dependencyPackageName] = this.dependencyVersionFor(dependencyRepositoryName);
+
+                        this.#repositoryPublishState.anyDependenciesUpdated = true;
+                    }
+                }
+            }
+        }
+
+        if (this.#repositoryPublishState.anyDependenciesUpdated) {
             this.savePackageConfiguration();
+        }
+
+        if (repository.additionalDependencies !== undefined) {
+            for (const additionalDependencyRepositoryName of repository.additionalDependencies) {
+                this.logger.trace(`Organization dependency ${this.getPackageName(additionalDependencyRepositoryName)} from additional dependencies`);
+
+                if (this.#isOrganizationDependencyUpdated(phaseDateTime, additionalDependencyRepositoryName, true)) {
+                    this.#repositoryPublishState.anyDependenciesUpdated = true;
+                }
+            }
         }
     }
 

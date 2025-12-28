@@ -1,4 +1,7 @@
 {
+  "versions": [
+    "1.0"
+  ],
   "organization": "aidc-toolkit",
   "repositories": {
     "dev": {
@@ -38,14 +41,14 @@
       }
     },
     "data": {
-      "dependencyType": "none",
+      "dependencyType": "helper",
       "excludePaths": [
         "docs/"
       ],
       "phaseStates": {}
     },
     "demo": {
-      "dependencyType": "none",
+      "dependencyType": "application",
       "phaseStates": {
         "beta": {
           "dateTime": "2025-12-14T18:29:50.000Z"
@@ -62,7 +65,7 @@
       }
     },
     "microsoft-add-in": {
-      "dependencyType": "none",
+      "dependencyType": "application",
       "phaseStates": {
         "beta": {
           "dateTime": "2025-12-14T18:30:30.000Z"
@@ -71,7 +74,7 @@
     },
     "aidc-toolkit.github.io": {
       "directory": "doc",
-      "dependencyType": "none",
+      "dependencyType": "application",
       "additionalDependencies": [
         "demo"
       ],
@@ -82,7 +85,7 @@
       }
     },
     "publish": {
-      "dependencyType": "none",
+      "dependencyType": "helper",
       "excludePaths": [
         "src/",
         "config/publish.json"

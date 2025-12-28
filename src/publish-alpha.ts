@@ -155,35 +155,37 @@ class PublishAlpha extends Publish {
      * @inheritDoc
      */
     protected async publish(): Promise<void> {
-        let savePackageConfigurationPending = false;
-
         const repositoryPublishState = this.repositoryPublishState;
         const packageConfiguration = repositoryPublishState.packageConfiguration;
 
-        // Check for external updates, even if there are no changes.
-        for (const currentDependencies of [packageConfiguration.devDependencies, packageConfiguration.dependencies]) {
-            if (currentDependencies !== undefined) {
-                for (const [dependencyPackageName, version] of Object.entries(currentDependencies)) {
-                    // Ignore organization dependencies.
-                    if (this.dependencyRepositoryName(dependencyPackageName) === null && version.startsWith("^")) {
-                        const [latestVersion] = this.run(RunOptions.RunAlways, true, "npm", "view", dependencyPackageName, "version");
+        // Check for external updates, even if there are no changes, if working on the latest version.
+        if (repositoryPublishState.repository.workingVersion === this.latestVersion) {
+            let savePackageConfigurationPending = false;
 
-                        if (latestVersion !== version.substring(1)) {
-                            this.logger.info(`Dependency ${dependencyPackageName}@${version} ${!this.#updateAll ? "pending update" : "updating"} to version ${latestVersion}.`);
+            for (const currentDependencies of [packageConfiguration.devDependencies, packageConfiguration.dependencies]) {
+                if (currentDependencies !== undefined) {
+                    for (const [dependencyPackageName, version] of Object.entries(currentDependencies)) {
+                        // Ignore organization dependencies.
+                        if (this.dependencyRepositoryName(dependencyPackageName) === null && version.startsWith("^")) {
+                            const [latestVersion] = this.run(RunOptions.RunAlways, true, "npm", "view", dependencyPackageName, "version");
 
-                            if (this.#updateAll) {
-                                currentDependencies[dependencyPackageName] = `^${latestVersion}`;
+                            if (latestVersion !== version.substring(1)) {
+                                this.logger.info(`Dependency ${dependencyPackageName}@${version} ${!this.#updateAll ? "pending update" : "updating"} to version ${latestVersion}.`);
 
-                                savePackageConfigurationPending = true;
+                                if (this.#updateAll) {
+                                    currentDependencies[dependencyPackageName] = `^${latestVersion}`;
+
+                                    savePackageConfigurationPending = true;
+                                }
                             }
                         }
                     }
                 }
             }
-        }
 
-        if (savePackageConfigurationPending) {
-            this.savePackageConfiguration();
+            if (savePackageConfigurationPending) {
+                this.savePackageConfiguration();
+            }
         }
 
         // Nothing to do if there are no changes and dependencies haven't been updated.
@@ -250,7 +252,7 @@ class PublishAlpha extends Publish {
             this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "test", "--if-present");
 
             // Nothing further required if this repository is not a dependency of others.
-            if (repositoryPublishState.repository.dependencyType !== "none") {
+            if (repositoryPublishState.repository.dependencyType === "external" || repositoryPublishState.repository.dependencyType === "internal") {
                 // Package version is transient.
                 const version = this.updatePackageVersion(undefined, undefined, undefined, `alpha.${new Date().toISOString().replaceAll(/\D/g, "").substring(0, 12)}`);
 
