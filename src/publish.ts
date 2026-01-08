@@ -527,7 +527,7 @@ export abstract class Publish {
          * New file name if status is "R", undefined otherwise.
          */
         function processChangedFile(status: string, file: string, newFile: string | undefined): void {
-            if (!/^[ AMDR]{1,2}$/.test(status)) {
+            if (!/^[ AMDR]{1,2}$/u.test(status)) {
                 throw new Error(`Unknown status "${status} for file ${file}"`);
             }
 
@@ -586,7 +586,7 @@ export abstract class Publish {
             // Get all files committed since last published.
             for (const line of this.run(RunOptions.RunAlways, true, "git", "log", "--since", phaseDateTime.toISOString(), "--name-status", "--reverse", "--pretty=oneline")) {
                 // Header starts with 40-character SHA.
-                if (/^[0-9a-f]{40} /.test(line)) {
+                if (/^[0-9a-f]{40} /u.test(line)) {
                     logger.debug(`Commit SHA ${line.substring(0, 40)}`);
                 } else {
                     const [status, file, newFile] = line.split("\t");
@@ -825,7 +825,7 @@ export abstract class Publish {
 
         const version = packageConfiguration.version;
 
-        const parsedVersionGroups = /^(?<majorVersion>\d+)\.(?<minorVersion>\d+)\.(?<patchVersion>\d+)(?:-(?<preReleaseIdentifier>alpha|beta))?$/.exec(version)?.groups;
+        const parsedVersionGroups = /^(?<majorVersion>\d+)\.(?<minorVersion>\d+)\.(?<patchVersion>\d+)(?:-(?<preReleaseIdentifier>alpha|beta))?$/u.exec(version)?.groups;
 
         if (parsedVersionGroups === undefined) {
             throw new Error(`Invalid package version ${version}`);
@@ -854,7 +854,7 @@ export abstract class Publish {
             throw new Error(`Branch ${branch} is not valid for ${this.phase} phase`);
         }
 
-        const parsedBranchGroups = /^v(?<branchMajorVersion>\d+)\.(?<branchMinorVersion>\d+)/.exec(
+        const parsedBranchGroups = /^v(?<branchMajorVersion>\d+)\.(?<branchMinorVersion>\d+)/u.exec(
             // Helper repositories are always on the latest version branch.
             repository.dependencyType !== "helper" ? branch : `v${this.latestVersion}`
         )?.groups;

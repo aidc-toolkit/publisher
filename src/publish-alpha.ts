@@ -70,7 +70,7 @@ class PublishAlpha extends Publish {
      * Array of parameter names.
      */
     static #parseParameterNames(s: string): string[] {
-        const parameterRegExp = /\{\{.+?}}/g;
+        const parameterRegExp = /\{\{.+?\}\}/ug;
 
         const parameterNames: string[] = [];
 
@@ -254,7 +254,7 @@ class PublishAlpha extends Publish {
             // Nothing further required if this repository is not a dependency of others.
             if (repositoryPublishState.repository.dependencyType === "external" || repositoryPublishState.repository.dependencyType === "internal") {
                 // Package version is transient.
-                const version = this.updatePackageVersion(undefined, undefined, undefined, `alpha.${new Date().toISOString().replaceAll(/\D/g, "").substring(0, 12)}`);
+                const version = this.updatePackageVersion(undefined, undefined, undefined, `alpha.${new Date().toISOString().replaceAll(/\D/ug, "").substring(0, 12)}`);
 
                 this.updatePhaseState({
                     version
@@ -267,7 +267,7 @@ class PublishAlpha extends Publish {
                     // Unpublish all prior alpha versions.
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Output is a JSON array.
                     for (const priorVersion of JSON.parse(this.run(RunOptions.RunAlways, true, "npm", "view", packageConfiguration.name, "versions", "--json").join("\n")) as string[]) {
-                        if (/^\d+.\d+.\d+-alpha.\d+$/.test(priorVersion) && priorVersion !== version) {
+                        if (/^\d+.\d+.\d+-alpha.\d+$/u.test(priorVersion) && priorVersion !== version) {
                             this.run(RunOptions.ParameterizeOnDryRun, false, "npm", "unpublish", `${packageConfiguration.name}@${priorVersion}`);
                         }
                     }
