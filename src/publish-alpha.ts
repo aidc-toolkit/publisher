@@ -283,4 +283,9 @@ class PublishAlpha extends Publish {
 }
 
 // Detailed syntax checking not required as this is an internal tool.
-await new PublishAlpha(process.argv.includes("--update-all"), process.argv.includes("--dry-run")).publishAll();
+const publishAlpha = new PublishAlpha(process.argv.includes("--update-all"), process.argv.includes("--dry-run"));
+
+publishAlpha.publishAll().catch((e: unknown) => {
+    publishAlpha.logger.error(e);
+    process.exit(1);
+});

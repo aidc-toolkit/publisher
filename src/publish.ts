@@ -265,7 +265,7 @@ export abstract class Publish {
     /**
      * Get the logger.
      */
-    protected get logger(): Logger<object> {
+    get logger(): Logger<object> {
         return this.#logger;
     }
 

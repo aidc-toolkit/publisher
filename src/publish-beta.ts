@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import process from "node:process";
 import { setTimeout } from "node:timers/promises";
 import { Octokit } from "octokit";
 import { parse as yamlParse } from "yaml";
@@ -338,4 +339,9 @@ class PublishBeta extends Publish {
 }
 
 // Detailed syntax checking not required as this is an internal tool.
-await new PublishBeta(process.argv.includes("--dry-run")).publishAll();
+const publishBeta = new PublishBeta(process.argv.includes("--dry-run"));
+
+publishBeta.publishAll().catch((e: unknown) => {
+    publishBeta.logger.error(e);
+    process.exit(1);
+});
