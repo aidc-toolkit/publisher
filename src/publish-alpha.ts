@@ -33,7 +33,7 @@ class PublishAlpha extends Publish {
     /**
      * @inheritDoc
      */
-    protected dependencyVersionFor(dependencyRepositoryName: string): string {
+    protected override dependencyVersionFor(dependencyRepositoryName: string): string {
         // Lock to version against which package is being developed.
         const phaseStateVersion = this.configuration.repositories[dependencyRepositoryName].phaseStates.alpha?.version;
 
@@ -47,7 +47,7 @@ class PublishAlpha extends Publish {
     /**
      * @inheritDoc
      */
-    protected getPhaseDateTime(repository: Repository, phaseDateTime: Date | undefined): Date | undefined {
+    protected override getPhaseDateTime(repository: Repository, phaseDateTime: Date | undefined): Date | undefined {
         // If beta or production has been published since the last alpha, use that instead.
         return this.latestDateTime(phaseDateTime, repository.phaseStates.beta?.dateTime, repository.phaseStates.production?.dateTime);
     }
@@ -55,7 +55,7 @@ class PublishAlpha extends Publish {
     /**
      * @inheritDoc
      */
-    protected isValidBranch(): boolean {
+    protected override isValidBranch(): boolean {
         // Any branch is valid for alpha publication.
         return true;
     }
@@ -154,7 +154,7 @@ class PublishAlpha extends Publish {
     /**
      * @inheritDoc
      */
-    protected async publish(): Promise<void> {
+    protected override async publish(): Promise<void> {
         const repositoryPublishState = this.repositoryPublishState;
         const packageConfiguration = repositoryPublishState.packageConfiguration;
 

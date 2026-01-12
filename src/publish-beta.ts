@@ -87,7 +87,7 @@ class PublishBeta extends Publish {
     /**
      * @inheritDoc
      */
-    protected dependencyVersionFor(dependencyRepositoryName: string): string {
+    protected override dependencyVersionFor(dependencyRepositoryName: string): string {
         const dependencyRepository = this.configuration.repositories[dependencyRepositoryName];
 
         // Lock to version against which package was developed.
@@ -131,7 +131,7 @@ class PublishBeta extends Publish {
     /**
      * @inheritDoc
      */
-    protected isValidBranch(): boolean {
+    protected override isValidBranch(): boolean {
         const repositoryPublishState = this.repositoryPublishState;
 
         // Branch for beta phase must match version for anything other than helper repository.
@@ -223,7 +223,7 @@ class PublishBeta extends Publish {
     /**
      * @inheritDoc
      */
-    protected async publish(): Promise<void> {
+    protected override async publish(): Promise<void> {
         const repositoryPublishState = this.repositoryPublishState;
 
         if (repositoryPublishState.preReleaseIdentifier === "alpha") {
