@@ -88,11 +88,11 @@
         }
       }
     },
-    "publish": {
+    "publisher": {
       "dependencyType": "helper",
       "excludePaths": [
         "src/",
-        "config/publish.json"
+        "config/publisher.json"
       ],
       "phaseStates": {
         "beta": {

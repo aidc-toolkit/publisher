@@ -1,11 +1,11 @@
 import { type LogLevelKey, omit, pick, propertyAs } from "@aidc-toolkit/core";
 import fs from "node:fs";
 import type { Logger } from "tslog";
-import sharedConfigurationJSON from "../config/publish.json" with { type: "json" };
-import localConfigurationJSON from "../config/publish.local.json" with { type: "json" };
+import sharedConfigurationJSON from "../config/publisher.json" with { type: "json" };
+import localConfigurationJSON from "../config/publisher.local.json" with { type: "json" };
 
-export const SHARED_CONFIGURATION_PATH = "config/publish.json";
-export const LOCAL_CONFIGURATION_PATH = "config/publish.local.json";
+export const SHARED_CONFIGURATION_PATH = "config/publisher.json";
+export const LOCAL_CONFIGURATION_PATH = "config/publisher.local.json";
 
 /**
  * Phase.

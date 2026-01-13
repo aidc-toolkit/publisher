@@ -2,12 +2,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import process from "node:process";
 import type { Repository } from "./configuration.js";
-import { Publish, RunOptions } from "./publish.js";
+import { Publisher, RunOptions } from "./publisher.js";
 
 /**
- * Publish alpha versions.
+ * Alpha release publisher.
  */
-class PublishAlpha extends Publish {
+class AlphaPublisher extends Publisher {
     /**
      * If true, update all dependencies automatically.
      */
@@ -119,10 +119,10 @@ class PublishAlpha extends Publish {
 
                 if (enValueType === "string") {
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Value is known to be string.
-                    const enParameterNames = PublishAlpha.#parseParameterNames(enValue as unknown as string);
+                    const enParameterNames = AlphaPublisher.#parseParameterNames(enValue as unknown as string);
 
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Value is known to be string.
-                    const localeParameterNames = PublishAlpha.#parseParameterNames(localeValue as unknown as string);
+                    const localeParameterNames = AlphaPublisher.#parseParameterNames(localeValue as unknown as string);
 
                     for (const enParameterName of enParameterNames) {
                         if (!localeParameterNames.includes(enParameterName)) {
@@ -136,7 +136,7 @@ class PublishAlpha extends Publish {
                         }
                     }
                 } else if (enValueType === "object") {
-                    PublishAlpha.#assertValidResources(enValue, locale, localeValue, `${parent === undefined ? "" : `${parent}.`}${enKey}`);
+                    AlphaPublisher.#assertValidResources(enValue, locale, localeValue, `${parent === undefined ? "" : `${parent}.`}${enKey}`);
                 }
             // Full locale falls back to language so ignore if missing.
             } else if (!isFullLocale) {
@@ -237,7 +237,7 @@ class PublishAlpha extends Publish {
 
                     for (const [locale, resources] of localeResourcesMap.entries()) {
                         if (locale !== "en") {
-                            PublishAlpha.#assertValidResources(enResources, locale, resources);
+                            AlphaPublisher.#assertValidResources(enResources, locale, resources);
                         }
                     }
                 }
@@ -283,9 +283,9 @@ class PublishAlpha extends Publish {
 }
 
 // Detailed syntax checking not required as this is an internal tool.
-const publishAlpha = new PublishAlpha(process.argv.includes("--update-all"), process.argv.includes("--dry-run"));
+const publisher = new AlphaPublisher(process.argv.includes("--update-all"), process.argv.includes("--dry-run"));
 
-publishAlpha.publishAll().catch((e: unknown) => {
-    publishAlpha.logger.error(e);
+publisher.publishAll().catch((e: unknown) => {
+    publisher.logger.error(e);
     process.exit(1);
 });

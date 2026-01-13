@@ -140,9 +140,9 @@ export type RunOptionKey = keyof typeof RunOptions;
 export type RunOption = typeof RunOptions[RunOptionKey];
 
 /**
- * Publish base class.
+ * Publisher base class.
  */
-export abstract class Publish {
+export abstract class Publisher {
     /**
      * Phase.
      */

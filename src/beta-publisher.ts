@@ -4,12 +4,12 @@ import process from "node:process";
 import { setTimeout } from "node:timers/promises";
 import { Octokit } from "octokit";
 import { parse as yamlParse } from "yaml";
-import secureConfigurationJSON from "../config/publish.secure.json" with { type: "json" };
+import secureConfigurationJSON from "../config/publisher.secure.json" with { type: "json" };
 import type { Repository } from "./configuration.js";
-import { Publish, RunOptions } from "./publish.js";
+import { Publisher, RunOptions } from "./publisher.js";
 
 /**
- * Configuration layout of publish.secure.json.
+ * Configuration layout of publisher.secure.json.
  */
 interface SecureConfiguration {
     token: string;
@@ -51,14 +51,14 @@ interface WorkflowConfiguration {
 }
 
 /**
- * Publish steps.
+ * Publication steps.
  */
 type Step = "install" | "build" | "commit" | "tag" | "push" | "workflow (push)" | "release" | "workflow (release)";
 
 /**
- * Publish beta versions.
+ * Beta release publisher.
  */
-class PublishBeta extends Publish {
+class BetaPublisher extends Publisher {
     /**
      * Secure configuration.
      */
@@ -339,9 +339,9 @@ class PublishBeta extends Publish {
 }
 
 // Detailed syntax checking not required as this is an internal tool.
-const publishBeta = new PublishBeta(process.argv.includes("--dry-run"));
+const publisher = new BetaPublisher(process.argv.includes("--dry-run"));
 
-publishBeta.publishAll().catch((e: unknown) => {
-    publishBeta.logger.error(e);
+publisher.publishAll().catch((e: unknown) => {
+    publisher.logger.error(e);
     process.exit(1);
 });
