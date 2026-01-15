@@ -300,7 +300,7 @@ class BetaPublisher extends Publisher {
         }
 
         await this.#runStep("push", () => {
-            this.run(RunOptions.ParameterizeOnDryRun, false, "git", "push", "--atomic", "origin", repositoryPublishState.branch, ...(repositoryPublishState.repository.dependencyType !== "helper" ? [tag] : []));
+            this.run(RunOptions.ParameterizeOnDryRun, false, "git", "push", "--atomic", "origin", repositoryPublishState.branch, ...repositoryPublishState.repository.dependencyType !== "helper" ? [tag] : []);
         });
 
         if (hasPushWorkflow) {
