@@ -405,9 +405,12 @@ export abstract class Publisher {
             throw new Error("Cannot capture output in dry run mode");
         }
 
+        // Construct all arguments.
+        const allArgs = [...args, ...this.configuration.additionalArgs?.[command] ?? [], ...effectiveRunOption !== RunOptions.ParameterizeOnDryRun ? [] : ["--dry-run"]];
+
         let output: string[];
 
-        const runningCommand = `Running command "${command}" with arguments [${args.join(", ")}].`;
+        const runningCommand = `Running command "${command}" with arguments [${allArgs.join(", ")}].`;
 
         if (effectiveRunOption === RunOptions.SkipOnDryRun) {
             this.logger.info(`Dry run: ${runningCommand}`);
@@ -416,7 +419,7 @@ export abstract class Publisher {
         } else {
             this.logger.debug(runningCommand);
 
-            const spawnResult = spawnSync(command, effectiveRunOption !== RunOptions.ParameterizeOnDryRun ? args : [...args, "--dry-run"], {
+            const spawnResult = spawnSync(command, allArgs, {
                 stdio: ["inherit", captureOutput ? "pipe" : "inherit", "inherit"]
             });
 

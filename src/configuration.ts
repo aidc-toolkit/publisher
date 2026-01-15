@@ -208,6 +208,11 @@ interface LocalConfiguration {
     readonly logLevel?: LogLevelKey;
 
     /**
+     * Additional arguments for externally run commands.
+     */
+    readonly additionalArgs?: Readonly<Record<string, string[] | undefined>>;
+
+    /**
      * Registry hosting organization's alpha repositories.
      */
     readonly alphaRegistry: string;
@@ -253,8 +258,8 @@ export interface Configuration extends SharedConfiguration, LocalConfiguration {
     readonly repositories: Readonly<Record<string, Repository>>;
 }
 
-const jsonSharedConfiguration: JSONSharedConfiguration = sharedConfigurationJSON;
-const jsonLocalConfiguration: JSONLocalConfiguration = localConfigurationJSON;
+let jsonSharedConfiguration: JSONSharedConfiguration = sharedConfigurationJSON;
+let jsonLocalConfiguration: JSONLocalConfiguration = localConfigurationJSON;
 
 /**
  * Map JSON phase states to internal phase states.
@@ -337,7 +342,7 @@ function toJSONPhaseStates(phaseStates: Readonly<Partial<Record<Phase, PhaseStat
  * If true, outputs to logger rather than file.
  */
 export function saveConfiguration(configuration: Configuration, logger: Logger<object>, dryRun: boolean): void {
-    const jsonSharedConfiguration: JSONSharedConfiguration = {
+    jsonSharedConfiguration = {
         ...pick(configuration, "versions", "organization"),
         repositories: Object.fromEntries(Object.entries(configuration.repositories).map(([repositoryName, repository]) => [repositoryName, {
             ...pick(repository, "directory", "dependencyType", "additionalDependencies", "excludePaths"),
@@ -345,8 +350,8 @@ export function saveConfiguration(configuration: Configuration, logger: Logger<o
         }]))
     };
 
-    const jsonLocalConfiguration: JSONLocalConfiguration = {
-        ...pick(configuration, "logLevel", "alphaRegistry", "publishState"),
+    jsonLocalConfiguration = {
+        ...pick(configuration, "logLevel", "additionalArgs", "alphaRegistry", "publishState"),
         repositories: Object.fromEntries(Object.entries(configuration.repositories).map(([repositoryName, repository]) => [repositoryName, {
             ...pick(repository, "workingVersion"),
             phaseStates: toJSONPhaseStates(pick(repository.phaseStates, "alpha"))
