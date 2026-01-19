@@ -285,7 +285,7 @@ class BetaPublisher extends Publisher {
         });
 
         await this.#runStep("build", () => {
-            this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "build:release", "--if-present");
+            this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "build:beta", "--if-present");
         });
 
         await this.#runStep("commit", () => {
