@@ -243,8 +243,8 @@ class AlphaPublisher extends Publisher {
                 }
             }
 
-            // Run development build if present.
-            this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "build:alpha", "--if-present");
+            // Run alpha build.
+            this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "build:alpha");
 
             // Run test if present.
             this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "test", "--if-present");
