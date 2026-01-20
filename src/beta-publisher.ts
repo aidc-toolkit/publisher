@@ -139,6 +139,16 @@ class BetaPublisher extends Publisher {
     }
 
     /**
+     * @inheritDoc
+     */
+    protected override initialize(): void {
+        super.initialize();
+
+        // Switching away from local registry causes problems for the NPM cache.
+        this.run(RunOptions.SkipOnDryRun, false, "npm", "cache", "clean", "-force");
+    }
+
+    /**
      * Run a step.
      *
      * Repository.

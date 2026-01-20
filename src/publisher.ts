@@ -917,6 +917,12 @@ export abstract class Publisher {
     }
 
     /**
+     * Initialize publication.
+     */
+    protected initialize(): void {
+    }
+
+    /**
      * Publish current repository.
      */
     protected abstract publish(): Promisable<void>;
@@ -927,6 +933,10 @@ export abstract class Publisher {
     async publishAll(): Promise<void> {
         try {
             await i18nCoreInit(I18nEnvironments.CLI, false);
+
+            if (this.publishState.repositoryName === undefined) {
+                this.initialize();
+            }
 
             const startDirectory = process.cwd();
 
@@ -965,7 +975,7 @@ export abstract class Publisher {
 
             delete this.configuration.publishState;
 
-            this.finalizeAll();
+            this.finalize();
 
             this.#saveConfiguration();
 
@@ -978,8 +988,8 @@ export abstract class Publisher {
     }
 
     /**
-     * Finalize publishing all repositories.
+     * Finalize publication.
      */
-    protected finalizeAll(): void {
+    protected finalize(): void {
     }
 }
