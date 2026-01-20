@@ -1,4 +1,4 @@
-import { getLogger, i18nCoreInit, I18nEnvironments, pick, type Promisable } from "@aidc-toolkit/core";
+import { getLogger, i18nCoreInit, I18nEnvironments, parseVersion, pick, type Promisable } from "@aidc-toolkit/core";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as process from "node:process";
@@ -834,18 +834,12 @@ export abstract class Publisher {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Package configuration format is known.
         const packageConfiguration = JSON.parse(fs.readFileSync(PACKAGE_CONFIGURATION_PATH).toString()) as PackageConfiguration;
 
-        const version = packageConfiguration.version;
-
-        const parsedVersionGroups = /^(?<majorVersion>\d+)\.(?<minorVersion>\d+)\.(?<patchVersion>\d+)(?:-(?<preReleaseIdentifier>alpha|beta))?$/u.exec(version)?.groups;
-
-        if (parsedVersionGroups === undefined) {
-            throw new Error(`Invalid package version ${version}`);
-        }
-
-        const majorVersion = Number(parsedVersionGroups["majorVersion"]);
-        const minorVersion = Number(parsedVersionGroups["minorVersion"]);
-        const patchVersion = Number(parsedVersionGroups["patchVersion"]);
-        const preReleaseIdentifier = parsedVersionGroups["preReleaseIdentifier"] ?? null;
+        const {
+            majorVersion,
+            minorVersion,
+            patchVersion,
+            preReleaseIdentifier
+        } = parseVersion(packageConfiguration.version);
 
         this.#repositoryPublishState = {
             repositoryName,
@@ -857,7 +851,7 @@ export abstract class Publisher {
             majorVersion,
             minorVersion,
             patchVersion,
-            preReleaseIdentifier,
+            preReleaseIdentifier: preReleaseIdentifier ?? null,
             savePackageConfigurationPending: false,
             anyDependenciesUpdated: false
         };
