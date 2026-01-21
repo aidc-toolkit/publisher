@@ -63,8 +63,8 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-20T18:20:30.000Z",
-          "version": "1.0.34-beta"
+          "dateTime": "2026-01-21T16:39:25.000Z",
+          "version": "1.0.35-beta"
         }
       }
     },
@@ -72,7 +72,7 @@
       "dependencyType": "application",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-20T23:07:36.000Z"
+          "dateTime": "2026-01-21T16:40:16.000Z"
         }
       }
     },
@@ -85,7 +85,7 @@
       ],
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-20T23:10:54.000Z"
+          "dateTime": "2026-01-21T16:43:56.000Z"
         }
       }
     },
