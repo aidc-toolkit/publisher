@@ -236,6 +236,8 @@ class BetaPublisher extends Publisher {
     protected override async publish(): Promise<void> {
         const repositoryPublishState = this.repositoryPublishState;
 
+        let skip = false;
+
         if (repositoryPublishState.preReleaseIdentifier === "alpha") {
             if (this.anyChanges(repositoryPublishState.repository.phaseStates.alpha?.dateTime, false)) {
                 throw new Error("Repository has changed since last alpha published");
@@ -254,97 +256,103 @@ class BetaPublisher extends Publisher {
             // Revert to default registry for organization.
             this.run(RunOptions.SkipOnDryRun, false, "npm", "config", "delete", this.atOrganizationRegistry, "--location", "project");
         // Ignore changes after publication process has started.
-        } else if (this.publishState.step === undefined && this.anyChanges(repositoryPublishState.repository.phaseStates.alpha?.dateTime, false)) {
-            throw new Error("Repository has changed since last alpha published");
+        } else if (this.publishState.step === undefined) {
+            if (this.anyChanges(repositoryPublishState.repository.phaseStates.beta?.dateTime, false)) {
+                throw new Error("Repository has changed since last beta published");
+            }
+
+            skip = true;
         }
 
-        const tag = `v${repositoryPublishState.packageConfiguration.version}`;
+        if (!skip) {
+            const tag = `v${repositoryPublishState.packageConfiguration.version}`;
 
-        if (this.publishState.step !== undefined) {
-            this.logger.debug(`Repository failed at step "${this.publishState.step}" on prior run`);
-        }
+            if (this.publishState.step !== undefined) {
+                this.logger.debug(`Repository failed at step "${this.publishState.step}" on prior run`);
+            }
 
-        const workflowsPath = ".github/workflows/";
+            const workflowsPath = ".github/workflows/";
 
-        let hasPushWorkflow = false;
-        let hasReleaseWorkflow = false;
+            let hasPushWorkflow = false;
+            let hasReleaseWorkflow = false;
 
-        if (fs.existsSync(workflowsPath)) {
-            this.logger.debug("Checking workflows");
+            if (fs.existsSync(workflowsPath)) {
+                this.logger.debug("Checking workflows");
 
-            for (const workflowFile of fs.readdirSync(workflowsPath).filter(workflowFile => workflowFile.endsWith(".yml"))) {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Workflow configuration format is known.
-                const workflowOn = (yamlParse(fs.readFileSync(path.resolve(workflowsPath, workflowFile)).toString()) as WorkflowConfiguration).on;
+                for (const workflowFile of fs.readdirSync(workflowsPath).filter(workflowFile => workflowFile.endsWith(".yml"))) {
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Workflow configuration format is known.
+                    const workflowOn = (yamlParse(fs.readFileSync(path.resolve(workflowsPath, workflowFile)).toString()) as WorkflowConfiguration).on;
 
-                if (workflowOn.push !== undefined && (workflowOn.push?.branches === undefined || workflowOn.push.branches.includes("v*"))) {
-                    this.logger.debug("Repository has push workflow");
+                    if (workflowOn.push !== undefined && (workflowOn.push?.branches === undefined || workflowOn.push.branches.includes("v*"))) {
+                        this.logger.debug("Repository has push workflow");
 
-                    hasPushWorkflow = true;
-                }
+                        hasPushWorkflow = true;
+                    }
 
-                if (workflowOn.release !== undefined && (workflowOn.release?.types === undefined || workflowOn.release.types.includes("published"))) {
-                    this.logger.debug("Repository has release workflow");
+                    if (workflowOn.release !== undefined && (workflowOn.release?.types === undefined || workflowOn.release.types.includes("published"))) {
+                        this.logger.debug("Repository has release workflow");
 
-                    hasReleaseWorkflow = true;
+                        hasReleaseWorkflow = true;
+                    }
                 }
             }
-        }
 
-        await this.#runStep("install", () => {
-            this.updatePackageLockConfiguration();
-        });
-
-        await this.#runStep("build", () => {
-            this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "build:beta", "--if-present");
-        });
-
-        await this.#runStep("commit", () => {
-            this.commitUpdatedPackageVersion();
-        });
-
-        // Helper repositories don't use tags.
-        if (repositoryPublishState.repository.dependencyType !== "helper") {
-            await this.#runStep("tag", () => {
-                this.run(RunOptions.SkipOnDryRun, false, "git", "tag", tag);
-            });
-        }
-
-        await this.#runStep("push", () => {
-            this.run(RunOptions.ParameterizeOnDryRun, false, "git", "push", "--atomic", "origin", repositoryPublishState.branch, ...repositoryPublishState.repository.dependencyType !== "helper" ? [tag] : []);
-        });
-
-        if (hasPushWorkflow) {
-            await this.#runStep("workflow (push)", async () => {
-                await this.#validateWorkflow();
-            });
-        }
-
-        // Helper repositories don't publish releases.
-        if (repositoryPublishState.repository.dependencyType !== "helper") {
-            await this.#runStep("release", async () => {
-                if (this.dryRun) {
-                    this.logger.info("Dry run: Create release");
-                } else {
-                    await this.#octokit.rest.repos.createRelease({
-                        owner: this.configuration.organization,
-                        repo: repositoryPublishState.repositoryName,
-                        tag_name: tag,
-                        name: `Release ${tag}`,
-                        prerelease: true
-                    });
-                }
+            await this.#runStep("install", () => {
+                this.updatePackageLockConfiguration();
             });
 
-            if (hasReleaseWorkflow) {
-                await this.#runStep("workflow (release)", async () => {
+            await this.#runStep("build", () => {
+                this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "build:beta", "--if-present");
+            });
+
+            await this.#runStep("commit", () => {
+                this.commitUpdatedPackageVersion();
+            });
+
+            // Helper repositories don't use tags.
+            if (repositoryPublishState.repository.dependencyType !== "helper") {
+                await this.#runStep("tag", () => {
+                    this.run(RunOptions.SkipOnDryRun, false, "git", "tag", tag);
+                });
+            }
+
+            await this.#runStep("push", () => {
+                this.run(RunOptions.ParameterizeOnDryRun, false, "git", "push", "--atomic", "origin", repositoryPublishState.branch, ...repositoryPublishState.repository.dependencyType !== "helper" ? [tag] : []);
+            });
+
+            if (hasPushWorkflow) {
+                await this.#runStep("workflow (push)", async () => {
                     await this.#validateWorkflow();
                 });
             }
-        }
 
-        this.updatePhaseState({
-            dateTime: new Date()
-        });
+            // Helper repositories don't publish releases.
+            if (repositoryPublishState.repository.dependencyType !== "helper") {
+                await this.#runStep("release", async () => {
+                    if (this.dryRun) {
+                        this.logger.info("Dry run: Create release");
+                    } else {
+                        await this.#octokit.rest.repos.createRelease({
+                            owner: this.configuration.organization,
+                            repo: repositoryPublishState.repositoryName,
+                            tag_name: tag,
+                            name: `Release ${tag}`,
+                            prerelease: true
+                        });
+                    }
+                });
+
+                if (hasReleaseWorkflow) {
+                    await this.#runStep("workflow (release)", async () => {
+                        await this.#validateWorkflow();
+                    });
+                }
+            }
+
+            this.updatePhaseState({
+                dateTime: new Date()
+            });
+        }
     }
 }
 
