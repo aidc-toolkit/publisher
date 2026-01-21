@@ -17,8 +17,8 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-20T18:16:39.000Z",
-          "version": "1.0.34-beta"
+          "dateTime": "2026-01-21T23:32:28.000Z",
+          "version": "1.0.35-beta"
         }
       }
     },
@@ -26,8 +26,8 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-20T18:18:32.000Z",
-          "version": "1.0.34-beta"
+          "dateTime": "2026-01-21T23:34:51.000Z",
+          "version": "1.0.35-beta"
         }
       }
     },
@@ -35,8 +35,8 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-20T18:19:43.000Z",
-          "version": "1.0.34-beta"
+          "dateTime": "2026-01-21T23:36:42.000Z",
+          "version": "1.0.35-beta"
         }
       }
     },
@@ -47,7 +47,7 @@
       ],
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-20T18:19:48.000Z"
+          "dateTime": "2026-01-21T23:36:46.000Z"
         }
       }
     },
@@ -55,7 +55,7 @@
       "dependencyType": "application",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-20T18:19:52.000Z"
+          "dateTime": "2026-01-21T23:36:50.000Z"
         }
       }
     },
@@ -63,8 +63,8 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-21T16:39:25.000Z",
-          "version": "1.0.35-beta"
+          "dateTime": "2026-01-21T23:37:41.000Z",
+          "version": "1.0.37-beta"
         }
       }
     },
@@ -72,7 +72,7 @@
       "dependencyType": "application",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-21T16:40:16.000Z"
+          "dateTime": "2026-01-21T23:37:49.000Z"
         }
       }
     },
@@ -85,7 +85,7 @@
       ],
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-21T16:43:56.000Z"
+          "dateTime": "2026-01-21T23:47:24.000Z"
         }
       }
     },

@@ -1,6 +1,6 @@
 {
   "name": "@aidc-toolkit/publisher",
-  "version": "1.0.35-alpha",
+  "version": "1.0.35-beta",
   "description": "Publisher for AIDC Toolkit",
   "type": "module",
   "private": true,
@@ -32,6 +32,6 @@
     "yaml": "^2.8.2"
   },
   "dependencies": {
-    "@aidc-toolkit/core": "1.0.35-alpha.202601212324"
+    "@aidc-toolkit/core": "1.0.35-beta"
   }
 }
