@@ -149,7 +149,7 @@ class BetaPublisher extends Publisher {
      * @param stepRunner
      * Callback to execute step.
      */
-    async #runStep(step: Step, stepRunner: () => (void | Promise<void>)): Promise<void> {
+    async #runStep(step: Step, stepRunner: () => unknown): Promise<void> {
         const publishStateStep = this.publishState.step;
 
         if (publishStateStep === undefined || publishStateStep === step) {
@@ -311,31 +311,31 @@ class BetaPublisher extends Publisher {
             });
 
             if (hasPushWorkflow) {
-                await this.#runStep("workflow (push)", async () => {
-                    await this.#validateWorkflow();
-                });
+                await this.#runStep("workflow (push)", async () =>
+                    this.#validateWorkflow()
+                );
             }
 
             // Helper repositories don't publish releases.
             if (repositoryPublishState.repository.dependencyType !== "helper") {
-                await this.#runStep("release", async () => {
-                    if (this.dryRun) {
-                        this.logger.info("Dry run: Create release");
-                    } else {
-                        await this.#octokit.rest.repos.createRelease({
+                if (this.dryRun) {
+                    this.logger.info("Dry run: Create release");
+                } else {
+                    await this.#runStep("release", async () =>
+                        this.#octokit.rest.repos.createRelease({
                             owner: this.configuration.organization,
                             repo: repositoryPublishState.repositoryName,
                             tag_name: tag,
                             name: `Release ${tag}`,
                             prerelease: true
-                        });
-                    }
-                });
+                        })
+                    );
+                }
 
                 if (hasReleaseWorkflow) {
-                    await this.#runStep("workflow (release)", async () => {
-                        await this.#validateWorkflow();
-                    });
+                    await this.#runStep("workflow (release)", async () =>
+                        this.#validateWorkflow()
+                    );
                 }
             }
 
