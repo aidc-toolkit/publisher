@@ -5,7 +5,7 @@ import { setTimeout } from "node:timers/promises";
 import { Octokit } from "octokit";
 import { parse as yamlParse } from "yaml";
 import secureConfigurationJSON from "../config/publisher.secure.json" with { type: "json" };
-import type { Repository } from "./configuration.js";
+import { type Phase, PREVIOUS_PHASE } from "./configuration.js";
 import { Publisher, RunOptions } from "./publisher.js";
 
 /**
@@ -53,12 +53,12 @@ interface WorkflowConfiguration {
 /**
  * Publication steps.
  */
-type Step = "install" | "build" | "commit" | "tag" | "push" | "workflow (push)" | "release" | "workflow (release)" | "npm wait";
+type Step = "install" | "build" | "commit" | "tag" | "push" | "workflow (push)" | "release" | "workflow (release)" | "pull request" | "npm wait";
 
 /**
- * Beta release publisher.
+ * Non-alpha release publisher.
  */
-class BetaPublisher extends Publisher {
+export class NonAlphaPublisher extends Publisher {
     /**
      * Secure configuration.
      */
@@ -72,15 +72,18 @@ class BetaPublisher extends Publisher {
     /**
      * Constructor.
      *
+     * @param phase
+     * Phase, excluding alpha.
+     *
      * @param dryRun
      * If true, outputs what would be run rather than running it.
      */
-    constructor(dryRun: boolean) {
-        super("beta", dryRun);
+    constructor(phase: Exclude<Phase, "alpha">, dryRun: boolean) {
+        super(phase, dryRun);
 
         this.#octokit = new Octokit({
             auth: this.#secureConfiguration.token,
-            userAgent: `${this.configuration.organization} release`
+            userAgent: `${this.configuration.organization} publisher`
         });
     }
 
@@ -90,8 +93,7 @@ class BetaPublisher extends Publisher {
     protected override dependencyVersionFor(dependencyRepositoryName: string): string {
         const dependencyRepository = this.configuration.repositories[dependencyRepositoryName];
 
-        // Lock to version against which package was developed.
-        const phaseStateVersion = dependencyRepository.phaseStates.beta?.version;
+        const phaseStateVersion = dependencyRepository.phaseStates[this.phase]?.version;
 
         if (phaseStateVersion === undefined) {
             throw new Error(`*** Internal error *** Version not set for dependency ${dependencyRepositoryName}`);
@@ -101,7 +103,8 @@ class BetaPublisher extends Publisher {
 
         switch (dependencyRepository.dependencyType) {
             case "external":
-                dependencyVersion = phaseStateVersion;
+                // Lock to version against which package was developed if not in production.
+                dependencyVersion = this.phase !== "prod" ? phaseStateVersion : `^${phaseStateVersion}`;
                 break;
 
             case "internal":
@@ -119,22 +122,10 @@ class BetaPublisher extends Publisher {
     /**
      * @inheritDoc
      */
-    protected override getPhaseDateTime(repository: Repository, phaseDateTime: Date): Date;
-
-    /**
-     * @inheritDoc
-     */
-    protected override getPhaseDateTime(repository: Repository, phaseDateTime: Date | undefined): Date | undefined {
-        return this.latestDateTime(phaseDateTime, repository.phaseStates.production?.dateTime);
-    }
-
-    /**
-     * @inheritDoc
-     */
     protected override isValidBranch(): boolean {
         const repositoryPublishState = this.repositoryPublishState;
 
-        // Branch for beta phase must match version for anything other than helper repository.
+        // Branch for non-alpha phase must match version for anything other than helper repository.
         return repositoryPublishState.repository.dependencyType === "helper" || repositoryPublishState.branch === `v${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}`;
     }
 
@@ -225,33 +216,47 @@ class BetaPublisher extends Publisher {
      */
     protected override async publish(): Promise<void> {
         const repositoryPublishState = this.repositoryPublishState;
+        const repository = repositoryPublishState.repository;
+        const branch = repositoryPublishState.branch;
+        const preReleaseIdentifier = repositoryPublishState.preReleaseIdentifier;
+
+        const phase = this.phase;
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Only alpha has a null previous phase.
+        const previousPhase = PREVIOUS_PHASE[phase]!;
 
         let skip = false;
 
-        if (repositoryPublishState.preReleaseIdentifier === "alpha") {
-            if (this.anyChanges(repositoryPublishState.repository.phaseStates.alpha?.dateTime, false)) {
-                throw new Error("Repository has changed since last alpha published");
+        if (preReleaseIdentifier === previousPhase) {
+            if (this.anyChanges(repository.phaseStates[previousPhase]?.dateTime, false)) {
+                throw new Error(`Repository has changed since last ${previousPhase} published`);
             }
 
-            // This will save the package configuration.
-            const version = this.updatePackageVersion(undefined, undefined, undefined, "beta");
+            // Production version has no pre-release identifier.
+            const version = this.updatePackageVersion(undefined, undefined, undefined, phase !== "prod" ? phase : null);
 
-            if (repositoryPublishState.repository.dependencyType === "external" || repositoryPublishState.repository.dependencyType === "internal") {
+            if (repository.dependencyType === "external" || repository.dependencyType === "internal") {
                 // Save version to be picked up by dependents.
                 this.updatePhaseState({
                     version
                 });
             }
 
-            // Revert to default registry for organization.
-            this.run(RunOptions.SkipOnDryRun, false, "npm", "config", "delete", this.atOrganizationRegistry, "--location", "project");
-        // Ignore changes after publication process has started.
-        } else if (this.publishState.step === undefined) {
-            if (this.anyChanges(repositoryPublishState.repository.phaseStates.beta?.dateTime, false)) {
-                throw new Error("Repository has changed since last beta published");
+            // Alpha phase uses local registry.
+            if (previousPhase === "alpha") {
+                this.run(RunOptions.SkipOnDryRun, false, "npm", "config", "delete", this.atOrganizationRegistry, "--location", "project");
             }
+        } else if (preReleaseIdentifier === phase) {
+            // Ignore changes after publication process has started.
+            if (this.publishState.step === undefined) {
+                if (this.anyChanges(repository.phaseStates[phase]?.dateTime, false)) {
+                    throw new Error(`Repository has changed since last ${phase} published`);
+                }
 
-            skip = true;
+                // No changes since previous publication of this phase.
+                skip = true;
+            }
+        } else {
+            throw new Error(`Pre-release identifier must be either ${previousPhase} or ${phase}`);
         }
 
         if (!skip) {
@@ -292,7 +297,7 @@ class BetaPublisher extends Publisher {
             });
 
             await this.#runStep("build", () => {
-                this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "build:beta", "--if-present");
+                this.run(RunOptions.SkipOnDryRun, false, "npm", "run", `build:${phase}`, "--if-present");
             });
 
             await this.#runStep("commit", () => {
@@ -300,14 +305,14 @@ class BetaPublisher extends Publisher {
             });
 
             // Helper repositories don't use tags.
-            if (repositoryPublishState.repository.dependencyType !== "helper") {
+            if (repository.dependencyType !== "helper") {
                 await this.#runStep("tag", () => {
                     this.run(RunOptions.SkipOnDryRun, false, "git", "tag", tag);
                 });
             }
 
             await this.#runStep("push", () => {
-                this.run(RunOptions.ParameterizeOnDryRun, false, "git", "push", "--atomic", "origin", repositoryPublishState.branch, ...repositoryPublishState.repository.dependencyType !== "helper" ? [tag] : []);
+                this.run(RunOptions.ParameterizeOnDryRun, false, "git", "push", "--atomic", "origin", branch, ...repository.dependencyType !== "helper" ? [tag] : []);
             });
 
             if (hasPushWorkflow) {
@@ -317,7 +322,7 @@ class BetaPublisher extends Publisher {
             }
 
             // Helper repositories don't publish releases.
-            if (repositoryPublishState.repository.dependencyType !== "helper") {
+            if (repository.dependencyType !== "helper") {
                 if (this.dryRun) {
                     this.logger.info("Dry run: Create release");
                 } else {
@@ -327,7 +332,7 @@ class BetaPublisher extends Publisher {
                             repo: repositoryPublishState.repositoryName,
                             tag_name: tag,
                             name: `Release ${tag}`,
-                            prerelease: true
+                            prerelease: phase !== "prod"
                         })
                     );
                 }
@@ -339,8 +344,27 @@ class BetaPublisher extends Publisher {
                 }
             }
 
+            // Helper repositories don't have version flow.
+            if (repository.dependencyType !== "helper" && phase === "prod") {
+                // Branch is version preceded by 'v'.
+                const branchVersionIndex = this.configuration.versions.indexOf(branch.substring(1));
+                const nextBranch = branchVersionIndex !== this.configuration.versions.length - 1 ?
+                    `v${this.configuration.versions[branchVersionIndex + 1]}` :
+                    "main";
+
+                await this.#runStep("pull request", async () =>
+                    this.#octokit.rest.pulls.create({
+                        owner: this.configuration.organization,
+                        repo: repositoryPublishState.repositoryName,
+                        title: `Production version ${repositoryPublishState.packageConfiguration.version}`,
+                        head: branch,
+                        base: nextBranch
+                    })
+                );
+            }
+
             // External repositories need to give the NPM registry time to reindex.
-            if (repositoryPublishState.repository.dependencyType === "external") {
+            if (repository.dependencyType === "external") {
                 await this.#runStep("npm wait", async () =>
                     setTimeout(10000)
                 );
@@ -353,8 +377,14 @@ class BetaPublisher extends Publisher {
     }
 }
 
+const phase = process.argv[2];
+
+if (phase !== "beta" && phase !== "prod") {
+    throw new Error(`Invalid phase ${phase}`);
+}
+
 // Detailed syntax checking not required as this is an internal tool.
-const publisher = new BetaPublisher(process.argv.includes("--dry-run"));
+const publisher = new NonAlphaPublisher(phase, process.argv.includes("--dry-run"));
 
 publisher.publishAll().catch((e: unknown) => {
     publisher.logger.error(e);

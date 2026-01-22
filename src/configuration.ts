@@ -10,7 +10,25 @@ export const LOCAL_CONFIGURATION_PATH = "config/publisher.local.json";
 /**
  * Phase.
  */
-export type Phase = "alpha" | "beta" | "production";
+export type Phase = "alpha" | "beta" | "prod";
+
+/**
+ * Next phase mapping.
+ */
+export const NEXT_PHASE: Readonly<Record<Phase, Phase | null>> = {
+    alpha: "beta",
+    beta: "prod",
+    prod: null
+};
+
+/**
+ * Previous phase mapping.
+ */
+export const PREVIOUS_PHASE: Readonly<Record<Phase, Phase | null>> = {
+    alpha: null,
+    beta: "alpha",
+    prod: "beta"
+};
 
 /**
  * Phase state.
@@ -84,7 +102,7 @@ interface SharedRepository {
     /**
      * Beta and production phase states.
      */
-    readonly phaseStates?: Readonly<Partial<Record<"beta" | "production", PhaseState>>>;
+    readonly phaseStates?: Readonly<Partial<Record<"beta" | "prod", PhaseState>>>;
 }
 
 /**
@@ -99,7 +117,7 @@ interface JSONSharedRepository extends Omit<Readonly<SharedRepository>, "depende
     /**
      * Beta and production phase states.
      */
-    readonly phaseStates?: Readonly<Partial<Record<"beta" | "production", JSONPhaseState>>>;
+    readonly phaseStates?: Readonly<Partial<Record<"beta" | "prod", JSONPhaseState>>>;
 }
 
 /**
@@ -346,7 +364,7 @@ export function saveConfiguration(configuration: Configuration, logger: Logger<o
         ...pick(configuration, "versions", "organization"),
         repositories: Object.fromEntries(Object.entries(configuration.repositories).map(([repositoryName, repository]) => [repositoryName, {
             ...pick(repository, "directory", "dependencyType", "additionalDependencies", "excludePaths"),
-            phaseStates: toJSONPhaseStates(pick(repository.phaseStates, "beta", "production"))
+            phaseStates: toJSONPhaseStates(pick(repository.phaseStates, "beta", "prod"))
         }]))
     };
 

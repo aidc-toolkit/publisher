@@ -1,7 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import process from "node:process";
-import type { Repository } from "./configuration.js";
 import { Publisher, RunOptions } from "./publisher.js";
 
 /**
@@ -42,14 +41,6 @@ class AlphaPublisher extends Publisher {
         }
 
         return phaseStateVersion;
-    }
-
-    /**
-     * @inheritDoc
-     */
-    protected override getPhaseDateTime(repository: Repository, phaseDateTime: Date | undefined): Date | undefined {
-        // If beta or production has been published since the last alpha, use that instead.
-        return this.latestDateTime(phaseDateTime, repository.phaseStates.beta?.dateTime, repository.phaseStates.production?.dateTime);
     }
 
     /**

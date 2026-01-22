@@ -6,6 +6,7 @@ import type { Logger } from "tslog";
 import {
     type Configuration,
     loadConfiguration,
+    NEXT_PHASE,
     type Phase,
     type PhaseState,
     type PublishState,
@@ -309,6 +310,52 @@ export abstract class Publisher {
     }
 
     /**
+     * Get the phase date/time for a repository.
+     *
+     * @param isRequired
+     * True if phase date/time is required.
+     *
+     * @param repositoryType
+     * Repository type for error message.
+     *
+     * @param repositoryName
+     * Repository name for error message.
+     *
+     * @param repository
+     * Repository.
+     *
+     * @returns
+     * Phase date/time or undefined if phase never before published.
+     */
+    #getPhaseDateTime<IsRequired extends boolean>(isRequired: IsRequired, repositoryType: string, repositoryName: string, repository: Repository): IsRequired extends true ? Date : Date | undefined {
+        let phase: Phase | null = this.phase;
+
+        const phaseState = repository.phaseStates[phase];
+
+        if (phaseState === undefined) {
+            throw new Error(`*** Internal error *** ${repositoryType} ${repositoryName} does not have state for ${phase} phase`);
+        }
+
+        let latestDateTime = phaseState.dateTime;
+
+        // Phase date/time is the latest of this and all subsequent phases.
+        while ((phase = NEXT_PHASE[phase]) !== null) {
+            const dateTime = repository.phaseStates[phase]?.dateTime;
+
+            if (dateTime !== undefined && (latestDateTime === undefined || latestDateTime.getTime() < dateTime.getTime())) {
+                latestDateTime = dateTime;
+            }
+        }
+
+        if (isRequired && latestDateTime === undefined) {
+            throw new Error(`*** Internal error *** ${repositoryType} ${repositoryName} does not have phase date/time for ${this.phase} phase`);
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Type is determined above.
+        return latestDateTime as IsRequired extends true ? Date : Date | undefined;
+    }
+
+    /**
      * Get the dependency version for a dependency repository.
      *
      * @param dependencyRepositoryName
@@ -318,58 +365,6 @@ export abstract class Publisher {
      * Dependency version.
      */
     protected abstract dependencyVersionFor(dependencyRepositoryName: string): string;
-
-    /**
-     * Determine the latest date/time or undefined if all undefined.
-     *
-     * @param initialDateTime
-     * Initial date/time.
-     *
-     * @param additionalDateTimes
-     * Additional date/times.
-     *
-     * @returns
-     * Latest date/time.
-     */
-    protected latestDateTime(initialDateTime: Date | undefined, ...additionalDateTimes: Array<Date | undefined>): Date;
-
-    /**
-     * Determine the latest date/time or undefined if all undefined.
-     *
-     * @param initialDateTime
-     * Initial date/time.
-     *
-     * @param additionalDateTimes
-     * Additional date/times.
-     *
-     * @returns
-     * Latest date/time.
-     */
-    protected latestDateTime(initialDateTime: Date | undefined, ...additionalDateTimes: Array<Date | undefined>): Date | undefined {
-        let latestDateTime = initialDateTime;
-
-        for (const dateTime of additionalDateTimes) {
-            if (dateTime !== undefined && (latestDateTime === undefined || latestDateTime.getTime() < dateTime.getTime())) {
-                latestDateTime = dateTime;
-            }
-        }
-
-        return latestDateTime;
-    }
-
-    /**
-     * Get the phase date/time for a repository.
-     *
-     * @param repository
-     * Repository.
-     *
-     * @param phaseDateTime
-     * Initial phase date/time.
-     *
-     * @returns
-     * Phase date/time or undefined if phase never before published.
-     */
-    protected abstract getPhaseDateTime(repository: Repository, phaseDateTime: Date | undefined): Date | undefined;
 
     /**
      * Determine if branch is valid for the phase.
@@ -477,20 +472,9 @@ export abstract class Publisher {
      * True if organization dependency has been updated.
      */
     #isOrganizationDependencyUpdated(phaseDateTime: Date | undefined, dependencyRepositoryName: string, isAdditional: boolean): boolean {
-        const dependencyString = !isAdditional ? "Dependency" : "Additional dependency";
-
         const dependencyRepository = this.configuration.repositories[dependencyRepositoryName];
-        const dependencyPhaseState = dependencyRepository.phaseStates[this.phase];
 
-        if (dependencyPhaseState === undefined) {
-            throw new Error(`*** Internal error *** ${dependencyString} ${dependencyRepositoryName} does not have state for ${this.phase} phase`);
-        }
-
-        const repositoryPhaseDateTime = this.getPhaseDateTime(dependencyRepository, dependencyPhaseState.dateTime);
-
-        if (repositoryPhaseDateTime === undefined) {
-            throw new Error(`*** Internal error *** ${dependencyString} ${dependencyRepositoryName} does not have phase date/time for ${this.phase} phase`);
-        }
+        const repositoryPhaseDateTime = this.#getPhaseDateTime(true, !isAdditional ? "Dependency" : "Additional dependency", dependencyRepositoryName, dependencyRepository);
 
         const isUpdated = phaseDateTime === undefined || phaseDateTime.getTime() < repositoryPhaseDateTime.getTime();
 
@@ -827,7 +811,7 @@ export abstract class Publisher {
             repository.phaseStates[this.phase] = phaseState;
         }
 
-        const phaseDateTime = this.getPhaseDateTime(repository, phaseState.dateTime);
+        const phaseDateTime = this.#getPhaseDateTime(false, "Repository", repositoryName, repository);
 
         const branch = this.run(RunOptions.RunAlways, true, "git", "branch", "--show-current")[0];
 
@@ -861,7 +845,7 @@ export abstract class Publisher {
         }
 
         const parsedBranchGroups = /^v(?<branchMajorVersion>\d+)\.(?<branchMinorVersion>\d+)/u.exec(
-            // Helper repositories are always on the latest version branch.
+            // Helper repositories are always treated as if on the latest version branch.
             repository.dependencyType !== "helper" ? branch : `v${this.latestVersion}`
         )?.groups;
 
