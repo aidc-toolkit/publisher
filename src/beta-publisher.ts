@@ -139,16 +139,6 @@ class BetaPublisher extends Publisher {
     }
 
     /**
-     * @inheritDoc
-     */
-    protected override initialize(): void {
-        super.initialize();
-
-        // Switching away from local registry causes problems for the NPM cache.
-        this.run(RunOptions.SkipOnDryRun, false, "npm", "cache", "clean", "-force");
-    }
-
-    /**
      * Run a step.
      *
      * Repository.
@@ -255,6 +245,9 @@ class BetaPublisher extends Publisher {
 
             // Revert to default registry for organization.
             this.run(RunOptions.SkipOnDryRun, false, "npm", "config", "delete", this.atOrganizationRegistry, "--location", "project");
+
+            // Switching away from local registry causes problems for the NPM cache.
+            this.run(RunOptions.SkipOnDryRun, false, "npm", "cache", "clean", "-force");
         // Ignore changes after publication process has started.
         } else if (this.publishState.step === undefined) {
             if (this.anyChanges(repositoryPublishState.repository.phaseStates.beta?.dateTime, false)) {
