@@ -76,7 +76,7 @@ export class NonAlphaPublisher extends Publisher {
      * Phase, excluding alpha.
      *
      * @param dryRun
-     * If true, outputs what would be run rather than running it.
+     * If true, output what would be run rather than running it.
      */
     constructor(phase: Exclude<Phase, "alpha">, dryRun: boolean) {
         super(phase, dryRun);

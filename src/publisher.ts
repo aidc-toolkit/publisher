@@ -150,7 +150,7 @@ export abstract class Publisher {
     readonly #phase: Phase;
 
     /**
-     * If true, outputs what would be run rather than running it.
+     * If true, output what would be run rather than running it.
      */
     readonly #dryRun: boolean;
 
@@ -196,7 +196,7 @@ export abstract class Publisher {
      * Phase.
      *
      * @param dryRun
-     * If true, outputs what would be run rather than running it.
+     * If true, output what would be run rather than running it.
      */
     protected constructor(phase: Phase, dryRun: boolean) {
         this.#phase = phase;

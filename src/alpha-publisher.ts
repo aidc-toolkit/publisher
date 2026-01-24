@@ -8,6 +8,11 @@ import { Publisher, RunOptions } from "./publisher.js";
  */
 class AlphaPublisher extends Publisher {
     /**
+     * If true, publish fast, skipping unnecessary checks.
+     */
+    readonly #fast: boolean;
+
+    /**
      * If true, update all dependencies automatically.
      */
     readonly #updateAll: boolean;
@@ -17,16 +22,24 @@ class AlphaPublisher extends Publisher {
      *
      * If true, outputs what would be run rather than running it.
      *
+     * @param fast
+     * If true, publish fast, skipping unnecessary checks.
+     *
      * @param updateAll
      * If true, update all dependencies automatically.
      *
      * @param dryRun
-     * If true, outputs what would be run rather than running it.
+     * If true, output what would be run rather than running it.
      */
-    constructor(updateAll: boolean, dryRun: boolean) {
+    constructor(fast: boolean, updateAll: boolean, dryRun: boolean) {
         super("alpha", dryRun);
 
+        this.#fast = fast;
         this.#updateAll = updateAll;
+
+        if (fast && updateAll) {
+            throw new Error("Cannot specify both --fast and --update-all");
+        }
     }
 
     /**
@@ -149,8 +162,8 @@ class AlphaPublisher extends Publisher {
         const repositoryPublishState = this.repositoryPublishState;
         const packageConfiguration = repositoryPublishState.packageConfiguration;
 
-        // Check for external updates, even if there are no changes, if working on the latest version.
-        if (repositoryPublishState.repository.workingVersion === this.latestVersion) {
+        // Check for external updates, even if there are no changes, if not in fast mode and working on the latest version.
+        if (!this.#fast && repositoryPublishState.repository.workingVersion === this.latestVersion) {
             for (const currentDependencies of [packageConfiguration.devDependencies, packageConfiguration.dependencies]) {
                 if (currentDependencies !== undefined) {
                     for (const [dependencyPackageName, version] of Object.entries(currentDependencies)) {
@@ -191,44 +204,47 @@ class AlphaPublisher extends Publisher {
             // Update the package lock configuration to pick up any changes prior to this point.
             this.updatePackageLockConfiguration();
 
-            // Run lint if present.
-            this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "lint", "--if-present");
+            // Skip lint and localization checks if in fast mode.
+            if (!this.#fast) {
+                // Run lint if present.
+                this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "lint", "--if-present");
 
-            const localePath = path.resolve("src/locale");
+                const localePath = path.resolve("src/locale");
 
-            // Check for localization.
-            if (fs.existsSync(localePath) && fs.statSync(localePath).isDirectory()) {
-                const localeResourcesMap = new Map<string, object>();
+                // Check for localization.
+                if (fs.existsSync(localePath) && fs.statSync(localePath).isDirectory()) {
+                    const localeResourcesMap = new Map<string, object>();
 
-                for (const entry of fs.readdirSync(localePath)) {
-                    const localeEntryPath = path.resolve(localePath, entry);
+                    for (const entry of fs.readdirSync(localePath)) {
+                        const localeEntryPath = path.resolve(localePath, entry);
 
-                    if (fs.statSync(localeEntryPath).isDirectory()) {
-                        const resourcesPath = path.resolve(localeEntryPath, "locale-resources.ts");
+                        if (fs.statSync(localeEntryPath).isDirectory()) {
+                            const resourcesPath = path.resolve(localeEntryPath, "locale-resources.ts");
 
-                        if (fs.existsSync(resourcesPath)) {
-                            // eslint-disable-next-line no-await-in-loop -- Await cost is negligible.
-                            const resources: unknown = await import(resourcesPath);
+                            if (fs.existsSync(resourcesPath)) {
+                                // eslint-disable-next-line no-await-in-loop -- Await cost is negligible.
+                                const resources: unknown = await import(resourcesPath);
 
-                            if (typeof resources !== "object" || resources === null || !("default" in resources) || typeof resources.default !== "object" || resources.default === null) {
-                                throw new Error(`${resourcesPath} is not a valid locale resources file`);
+                                if (typeof resources !== "object" || resources === null || !("default" in resources) || typeof resources.default !== "object" || resources.default === null) {
+                                    throw new Error(`${resourcesPath} is not a valid locale resources file`);
+                                }
+
+                                localeResourcesMap.set(entry, resources.default);
                             }
-
-                            localeResourcesMap.set(entry, resources.default);
                         }
                     }
-                }
 
-                if (localeResourcesMap.size !== 0) {
-                    const enResources = localeResourcesMap.get("en");
+                    if (localeResourcesMap.size !== 0) {
+                        const enResources = localeResourcesMap.get("en");
 
-                    if (enResources === undefined) {
-                        throw new Error("English resources file not found");
-                    }
+                        if (enResources === undefined) {
+                            throw new Error("English resources file not found");
+                        }
 
-                    for (const [locale, resources] of localeResourcesMap.entries()) {
-                        if (locale !== "en") {
-                            AlphaPublisher.#assertValidResources(enResources, locale, resources);
+                        for (const [locale, resources] of localeResourcesMap.entries()) {
+                            if (locale !== "en") {
+                                AlphaPublisher.#assertValidResources(enResources, locale, resources);
+                            }
                         }
                     }
                 }
@@ -237,8 +253,10 @@ class AlphaPublisher extends Publisher {
             // Run alpha build.
             this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "build:alpha");
 
-            // Run test if present.
-            this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "test", "--if-present");
+            // Run test if present and not in fast mode.
+            if (!this.#fast) {
+                this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "test", "--if-present");
+            }
 
             // Nothing further required if this repository is not a dependency of others.
             if (repositoryPublishState.repository.dependencyType === "external" || repositoryPublishState.repository.dependencyType === "internal") {
@@ -273,8 +291,10 @@ class AlphaPublisher extends Publisher {
     }
 }
 
+const argv = process.argv;
+
 // Detailed syntax checking not required as this is an internal tool.
-const publisher = new AlphaPublisher(process.argv.includes("--update-all"), process.argv.includes("--dry-run"));
+const publisher = new AlphaPublisher(argv.includes("--fast"), argv.includes("--update-all"), argv.includes("--dry-run"));
 
 publisher.publishAll().catch((e: unknown) => {
     publisher.logger.error(e);
