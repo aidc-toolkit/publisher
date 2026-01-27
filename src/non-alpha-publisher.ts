@@ -5,7 +5,7 @@ import { setTimeout } from "node:timers/promises";
 import { Octokit } from "octokit";
 import { parse as yamlParse } from "yaml";
 import secureConfigurationJSON from "../config/publisher.secure.json" with { type: "json" };
-import { type Phase, PREVIOUS_PHASE } from "./configuration.js";
+import { NEXT_PHASE, type Phase, PREVIOUS_PHASE } from "./configuration.js";
 import { Publisher, RunOptions } from "./publisher.js";
 
 /**
@@ -223,10 +223,12 @@ export class NonAlphaPublisher extends Publisher {
         const phase = this.phase;
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Only alpha has a null previous phase.
         const previousPhase = PREVIOUS_PHASE[phase]!;
+        const nextPhase = NEXT_PHASE[phase];
+        const preReleasePhase = preReleaseIdentifier ?? "prod";
 
         let skip = false;
 
-        if (preReleaseIdentifier === previousPhase) {
+        if (preReleasePhase === previousPhase) {
             if (this.anyChanges(repository.phaseStates[previousPhase]?.dateTime, false)) {
                 throw new Error(`Repository has changed since last ${previousPhase} published`);
             }
@@ -245,7 +247,7 @@ export class NonAlphaPublisher extends Publisher {
             if (previousPhase === "alpha") {
                 this.run(RunOptions.SkipOnDryRun, false, "npm", "config", "delete", this.atOrganizationRegistry, "--location", "project");
             }
-        } else if ((preReleaseIdentifier ?? "prod") === phase) {
+        } else if (preReleasePhase === phase) {
             // Ignore changes after publication process has started.
             if (this.publishState.step === undefined) {
                 if (this.anyChanges(repository.phaseStates[phase]?.dateTime, false)) {
@@ -255,8 +257,11 @@ export class NonAlphaPublisher extends Publisher {
                 // No changes since previous publication of this phase.
                 skip = true;
             }
+        } else if (preReleasePhase === nextPhase) {
+            // No changes since publication of next phase.
+            skip = true;
         } else {
-            throw new Error(`Pre-release identifier must be either ${previousPhase} or ${phase}`);
+            throw new Error(`Pre-release identifier must be ${previousPhase}, ${phase}, or ${nextPhase}`);
         }
 
         if (!skip) {
