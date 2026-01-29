@@ -105,6 +105,10 @@
         }
       }
     },
+    "google-add-on": {
+      "dependencyType": "application",
+      "phaseStates": {}
+    },
     "aidc-toolkit.github.io": {
       "directory": "doc",
       "dependencyType": "application",
