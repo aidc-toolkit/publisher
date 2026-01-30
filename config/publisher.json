@@ -8,8 +8,8 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-29T20:15:11.000Z",
-          "version": "1.0.41-beta"
+          "dateTime": "2026-01-30T19:50:42.000Z",
+          "version": "1.0.42-beta"
         },
         "prod": {
           "version": "1.0.40",
@@ -21,8 +21,8 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-29T20:15:53.000Z",
-          "version": "1.0.42-beta"
+          "dateTime": "2026-01-30T19:51:29.000Z",
+          "version": "1.0.43-beta"
         },
         "prod": {
           "version": "1.0.41",
@@ -34,8 +34,8 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-29T20:17:58.000Z",
-          "version": "1.0.43-beta"
+          "dateTime": "2026-01-30T19:53:37.000Z",
+          "version": "1.0.44-beta"
         },
         "prod": {
           "version": "1.0.42",
@@ -47,8 +47,8 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-29T20:19:17.000Z",
-          "version": "1.0.44-beta"
+          "dateTime": "2026-01-30T19:54:52.000Z",
+          "version": "1.0.45-beta"
         },
         "prod": {
           "version": "1.0.43",
@@ -63,7 +63,7 @@
       ],
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-29T20:19:21.000Z"
+          "dateTime": "2026-01-30T19:54:56.000Z"
         },
         "prod": {
           "dateTime": "2026-01-27T21:03:21.000Z"
@@ -74,7 +74,7 @@
       "dependencyType": "application",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-29T20:19:24.000Z"
+          "dateTime": "2026-01-30T19:54:59.000Z"
         },
         "prod": {
           "dateTime": "2026-01-27T21:03:28.000Z"
@@ -85,8 +85,8 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-29T20:20:09.000Z",
-          "version": "1.0.47-beta"
+          "dateTime": "2026-01-30T19:55:43.000Z",
+          "version": "1.0.48-beta"
         },
         "prod": {
           "version": "1.0.46",
@@ -98,7 +98,7 @@
       "dependencyType": "application",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-29T20:20:15.000Z"
+          "dateTime": "2026-01-30T19:55:50.000Z"
         },
         "prod": {
           "dateTime": "2026-01-27T21:39:14.000Z"
@@ -109,7 +109,7 @@
       "dependencyType": "application",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-29T20:20:26.000Z"
+          "dateTime": "2026-01-30T19:56:02.000Z"
         }
       }
     },
@@ -122,7 +122,7 @@
       ],
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-01-29T20:51:04.000Z"
+          "dateTime": "2026-01-30T19:59:08.000Z"
         },
         "prod": {
           "dateTime": "2026-01-27T21:43:46.000Z"
