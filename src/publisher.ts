@@ -1,4 +1,11 @@
-import { getLogger, i18nCoreInit, I18nEnvironments, parseVersion, pick, type Promisable } from "@aidc-toolkit/core";
+import {
+    getLogger,
+    i18nCoreInit,
+    I18nLanguageDetectors,
+    parseVersion,
+    pick,
+    type Promisable
+} from "@aidc-toolkit/core";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as process from "node:process";
@@ -918,7 +925,7 @@ export abstract class Publisher {
      */
     async publishAll(): Promise<void> {
         try {
-            await i18nCoreInit(I18nEnvironments.CLI, false);
+            await i18nCoreInit(I18nLanguageDetectors.CLI, false);
 
             if (this.publishState.repositoryName === undefined) {
                 this.initialize();
