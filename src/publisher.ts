@@ -21,10 +21,6 @@ import {
     saveConfiguration
 } from "./configuration.js";
 
-export const PACKAGE_CONFIGURATION_PATH = "package.json";
-
-export const PACKAGE_LOCK_CONFIGURATION_PATH = "package-lock.json";
-
 /**
  * Configuration layout of package.json (relevant attributes only).
  */
@@ -150,6 +146,21 @@ export type RunOption = typeof RunOptions[RunOptionKey];
  * Publisher base class.
  */
 export abstract class Publisher {
+    /**
+     * Configuration path for package.json.
+     */
+    static readonly #PACKAGE_CONFIGURATION_PATH = "package.json";
+
+    /**
+     * Configuration path for package-lock.json.
+     */
+    static readonly #PACKAGE_LOCK_CONFIGURATION_PATH = "package-lock.json";
+
+    /**
+     * Configuration path for package-lock.json.
+     */
+    static readonly #SOURCE_VERSION_PATH = "src/version.ts";
+
     /**
      * Phase.
      */
@@ -564,7 +575,7 @@ export abstract class Publisher {
 
             if (addFile !== undefined && !changedFilesSet.has(addFile)) {
                 // Exclude hidden files and directories except possibly .github directory, package-lock.json, test directory, and any explicitly excluded files or directories.
-                if (((!addFile.startsWith(".") && !addFile.includes("/.")) || (!ignoreGitHub && addFile.startsWith(".github/"))) && addFile !== PACKAGE_LOCK_CONFIGURATION_PATH && !addFile.startsWith("test/") && excludePaths.filter(excludePath => addFile === excludePath || (excludePath.endsWith("/") && addFile.startsWith(excludePath))).length === 0) {
+                if (((!addFile.startsWith(".") && !addFile.includes("/.")) || (!ignoreGitHub && addFile.startsWith(".github/"))) && addFile !== Publisher.#PACKAGE_LOCK_CONFIGURATION_PATH && !addFile.startsWith("test/") && excludePaths.filter(excludePath => addFile === excludePath || (excludePath.endsWith("/") && addFile.startsWith(excludePath))).length === 0) {
                     logger.debug(`+${addFile}`);
 
                     changedFilesSet.add(addFile);
@@ -691,7 +702,7 @@ export abstract class Publisher {
         if (this.dryRun) {
             this.logger.info(`Dry run: Saving package configuration\n${JSON.stringify(pick(packageConfiguration, "name", "version", "devDependencies", "dependencies"), null, 2)}\n`);
         } else {
-            fs.writeFileSync(PACKAGE_CONFIGURATION_PATH, `${JSON.stringify(packageConfiguration, null, 2)}\n`);
+            fs.writeFileSync(Publisher.#PACKAGE_CONFIGURATION_PATH, `${JSON.stringify(packageConfiguration, null, 2)}\n`);
         }
 
         repositoryPublishState.savePackageConfigurationPending = false;
@@ -703,6 +714,36 @@ export abstract class Publisher {
     protected updatePackageLockConfiguration(): void {
         // Run "npm install" to update package configuration lock file.
         this.run(RunOptions.ParameterizeOnDryRun, false, "npm", "install");
+    }
+
+    /**
+     * Update the source version declaration file.
+     *
+     * @param version
+     * Version.
+     */
+    #updateSourceVersion(version: string): void {
+        const repositoryPublishState = this.repositoryPublishState;
+
+        if (repositoryPublishState.repository.dependencyType !== "helper") {
+            const addToGit = !fs.existsSync(Publisher.#SOURCE_VERSION_PATH);
+
+            if (this.dryRun) {
+                this.logger.info(`Dry run: Update source version declaration file with version ${version}`);
+            } else {
+                fs.writeFileSync(Publisher.#SOURCE_VERSION_PATH, [
+                    "/**",
+                    " * Repository version, updated automatically during publication.",
+                    " */",
+                    `export const VERSION = "${version}";`,
+                    ""
+                ].join("\n"));
+            }
+
+            if (addToGit) {
+                this.run(RunOptions.ParameterizeOnDryRun, false, "git", "add", Publisher.#SOURCE_VERSION_PATH);
+            }
+        }
     }
 
     /**
@@ -720,10 +761,13 @@ export abstract class Publisher {
      * @param preReleaseIdentifier
      * Pre-release identifier or undefined if no change.
      *
+     * @param preReleaseDateTime
+     * Pre-release date/time or undefined if no change. Applies only to alpha pre-release.
+     *
      * @returns
      * Updated package version.
      */
-    protected updatePackageVersion(majorVersion: number | undefined, minorVersion: number | undefined, patchVersion: number | undefined, preReleaseIdentifier: string | null | undefined): string {
+    protected updatePackageVersion(majorVersion: number | undefined, minorVersion: number | undefined, patchVersion: number | undefined, preReleaseIdentifier: string | null | undefined, preReleaseDateTime?: string): string {
         const repositoryPublishState = this.repositoryPublishState;
 
         if (majorVersion !== undefined) {
@@ -742,7 +786,20 @@ export abstract class Publisher {
             repositoryPublishState.preReleaseIdentifier = preReleaseIdentifier;
         }
 
-        const version = `${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}.${repositoryPublishState.patchVersion}${repositoryPublishState.preReleaseIdentifier !== null ? `-${repositoryPublishState.preReleaseIdentifier}` : ""}`;
+        const baseVersion = `${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}.${repositoryPublishState.patchVersion}${
+            repositoryPublishState.preReleaseIdentifier !== null ?
+                `-${repositoryPublishState.preReleaseIdentifier}` :
+                ""
+        }`;
+
+        if (baseVersion !== repositoryPublishState.packageConfiguration.version) {
+            this.#updateSourceVersion(baseVersion);
+        }
+
+        const version = `${baseVersion}${repositoryPublishState.preReleaseIdentifier === "alpha" && preReleaseDateTime !== undefined ?
+            `.${preReleaseDateTime}` :
+            ""
+        }`;
 
         repositoryPublishState.packageConfiguration.version = version;
 
@@ -825,7 +882,7 @@ export abstract class Publisher {
         const branch = this.run(RunOptions.RunAlways, true, "git", "branch", "--show-current")[0];
 
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Package configuration format is known.
-        const packageConfiguration = JSON.parse(fs.readFileSync(PACKAGE_CONFIGURATION_PATH).toString()) as PackageConfiguration;
+        const packageConfiguration = JSON.parse(fs.readFileSync(Publisher.#PACKAGE_CONFIGURATION_PATH).toString()) as PackageConfiguration;
 
         const {
             majorVersion,
@@ -870,7 +927,7 @@ export abstract class Publisher {
                 }
 
                 this.updatePackageVersion(branchMajorVersion, branchMinorVersion, 0, null);
-                this.commitUpdatedPackageVersion(PACKAGE_CONFIGURATION_PATH);
+                this.commitUpdatedPackageVersion(Publisher.#PACKAGE_CONFIGURATION_PATH);
             }
         }
 
@@ -947,6 +1004,11 @@ export abstract class Publisher {
                             process.chdir(directory);
 
                             this.#buildPublishState(repositoryName, repository);
+
+                            // Create the repository source version declaration file if it doesn't exist.
+                            if (this.repositoryPublishState.repository.dependencyType !== "helper" && !fs.existsSync(Publisher.#SOURCE_VERSION_PATH)) {
+                                this.#updateSourceVersion(this.repositoryPublishState.packageConfiguration.version);
+                            }
 
                             // eslint-disable-next-line no-await-in-loop -- Next iteration requires previous to finish.
                             await this.publish();
