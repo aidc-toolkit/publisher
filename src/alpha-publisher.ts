@@ -192,6 +192,10 @@ class AlphaPublisher extends Publisher {
             this.savePackageConfiguration();
         }
 
+        if (this.#updateAll) {
+            this.run(RunOptions.ParameterizeOnDryRun, false, "npm", "update");
+        }
+
         // Nothing to do if there are no changes and dependencies haven't been updated.
         if (this.anyChanges(repositoryPublishState.phaseDateTime, true) || repositoryPublishState.anyDependenciesUpdated) {
             const switchToAlpha = repositoryPublishState.preReleaseIdentifier !== "alpha";

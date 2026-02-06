@@ -154,11 +154,6 @@ export abstract class Publisher {
     /**
      * Configuration path for package-lock.json.
      */
-    static readonly #PACKAGE_LOCK_CONFIGURATION_PATH = "package-lock.json";
-
-    /**
-     * Configuration path for package-lock.json.
-     */
     static readonly #SOURCE_VERSION_PATH = "src/version.ts";
 
     /**
@@ -574,8 +569,8 @@ export abstract class Publisher {
             }
 
             if (addFile !== undefined && !changedFilesSet.has(addFile)) {
-                // Exclude hidden files and directories except possibly .github directory, package-lock.json, test directory, and any explicitly excluded files or directories.
-                if (((!addFile.startsWith(".") && !addFile.includes("/.")) || (!ignoreGitHub && addFile.startsWith(".github/"))) && addFile !== Publisher.#PACKAGE_LOCK_CONFIGURATION_PATH && !addFile.startsWith("test/") && excludePaths.filter(excludePath => addFile === excludePath || (excludePath.endsWith("/") && addFile.startsWith(excludePath))).length === 0) {
+                // Exclude hidden files and directories except possibly .github directory, test directory, and any explicitly excluded files or directories.
+                if (((!addFile.startsWith(".") && !addFile.includes("/.")) || (!ignoreGitHub && addFile.startsWith(".github/"))) && !addFile.startsWith("test/") && excludePaths.filter(excludePath => addFile === excludePath || (excludePath.endsWith("/") && addFile.startsWith(excludePath))).length === 0) {
                     logger.debug(`+${addFile}`);
 
                     changedFilesSet.add(addFile);
