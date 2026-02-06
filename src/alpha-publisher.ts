@@ -206,6 +206,9 @@ class AlphaPublisher extends Publisher {
             // Update the package lock configuration to pick up any changes prior to this point.
             this.updatePackageLockConfiguration();
 
+            // Run generate source if present.
+            this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "generate-source", "--if-present");
+
             // Skip lint and localization checks if in fast mode.
             if (!this.#fast) {
                 // Run lint if present.
