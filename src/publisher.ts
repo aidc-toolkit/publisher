@@ -902,6 +902,8 @@ export abstract class Publisher {
             anyDependenciesUpdated: false
         };
 
+        const repositoryPublishState = this.#repositoryPublishState;
+
         if (!this.isValidBranch()) {
             throw new Error(`Branch ${branch} is not valid for ${this.phase} phase`);
         }
@@ -927,8 +929,9 @@ export abstract class Publisher {
             }
         }
 
+        // Version in repository publish state will be updated if in a new branch.
         // eslint-disable-next-line no-param-reassign -- Repository is necessarily updated as part of building publish state.
-        repository.workingVersion = `${majorVersion}.${minorVersion}`;
+        repository.workingVersion = `${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}`;
 
         for (const dependencies of [packageConfiguration.devDependencies ?? {}, packageConfiguration.dependencies ?? {}]) {
             for (const dependencyPackageName of Object.keys(dependencies)) {
@@ -942,21 +945,21 @@ export abstract class Publisher {
                         // Update dependency version to match latest update.
                         dependencies[dependencyPackageName] = this.dependencyVersionFor(dependencyRepositoryName);
 
-                        this.#repositoryPublishState.anyDependenciesUpdated = true;
+                        repositoryPublishState.anyDependenciesUpdated = true;
                     }
                 }
             }
         }
 
         // Saving the package configuration would affect check for any changes so defer it.
-        this.#repositoryPublishState.savePackageConfigurationPending = this.#repositoryPublishState.anyDependenciesUpdated;
+        repositoryPublishState.savePackageConfigurationPending = repositoryPublishState.anyDependenciesUpdated;
 
         if (repository.additionalDependencies !== undefined) {
             for (const additionalDependencyRepositoryName of repository.additionalDependencies) {
                 this.logger.trace(`Organization dependency ${this.getPackageName(additionalDependencyRepositoryName)} from additional dependencies`);
 
                 if (this.#isOrganizationDependencyUpdated(phaseDateTime, additionalDependencyRepositoryName, true)) {
-                    this.#repositoryPublishState.anyDependenciesUpdated = true;
+                    repositoryPublishState.anyDependenciesUpdated = true;
                 }
             }
         }
