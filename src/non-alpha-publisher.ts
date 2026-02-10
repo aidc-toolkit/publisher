@@ -229,7 +229,7 @@ export class NonAlphaPublisher extends Publisher {
         let skip = false;
 
         if (preReleasePhase === previousPhase) {
-            if (this.anyChanges(repository.phaseStates[previousPhase]?.dateTime, false)) {
+            if (this.anyChanges(repository.phaseStates[previousPhase]?.dateTime)) {
                 throw new Error(`Repository has changed since last ${previousPhase} published`);
             }
 
@@ -250,7 +250,7 @@ export class NonAlphaPublisher extends Publisher {
         } else if (preReleasePhase === phase) {
             // Ignore changes after publication process has started.
             if (this.publishState.step === undefined) {
-                if (this.anyChanges(repository.phaseStates[phase]?.dateTime, false)) {
+                if (this.anyChanges(repository.phaseStates[phase]?.dateTime)) {
                     throw new Error(`Repository has changed since last ${phase} published`);
                 }
 

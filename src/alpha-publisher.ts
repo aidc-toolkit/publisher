@@ -197,7 +197,7 @@ class AlphaPublisher extends Publisher {
         }
 
         // Nothing to do if there are no changes and dependencies haven't been updated.
-        if (this.anyChanges(repositoryPublishState.phaseDateTime, true) || repositoryPublishState.anyDependenciesUpdated) {
+        if (this.anyChanges(repositoryPublishState.phaseDateTime) || repositoryPublishState.anyDependenciesUpdated) {
             const switchToAlpha = repositoryPublishState.preReleaseIdentifier !== "alpha";
 
             if (switchToAlpha) {

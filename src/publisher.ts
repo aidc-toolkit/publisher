@@ -503,13 +503,12 @@ export abstract class Publisher {
      * @param phaseDateTime
      * Phase date/time to check against or undefined if phase never before published.
      *
-     * @param ignoreGitHub
      * If true, ignore .github directory.
      *
      * @returns
      * True if there have been any changes since the phase date/time.
      */
-    protected anyChanges(phaseDateTime: Date | undefined, ignoreGitHub: boolean): boolean {
+    protected anyChanges(phaseDateTime: Date | undefined): boolean {
         let anyChanges: boolean;
 
         const excludePaths = this.repositoryPublishState.repository.excludePaths ?? [];
@@ -569,8 +568,8 @@ export abstract class Publisher {
             }
 
             if (addFile !== undefined && !changedFilesSet.has(addFile)) {
-                // Exclude hidden files and directories except possibly .github directory, test directory, and any explicitly excluded files or directories.
-                if (((!addFile.startsWith(".") && !addFile.includes("/.")) || (!ignoreGitHub && addFile.startsWith(".github/"))) && !addFile.startsWith("test/") && excludePaths.filter(excludePath => addFile === excludePath || (excludePath.endsWith("/") && addFile.startsWith(excludePath))).length === 0) {
+                // Exclude test directory and any explicitly excluded files or directories.
+                if (!addFile.startsWith("test/") && excludePaths.every(excludePath => addFile !== excludePath && (!excludePath.endsWith("/") || !addFile.startsWith(excludePath)))) {
                     logger.debug(`+${addFile}`);
 
                     changedFilesSet.add(addFile);
