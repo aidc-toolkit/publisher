@@ -109,7 +109,7 @@
       "dependencyType": "application",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-02-10T17:14:45.000Z"
+          "dateTime": "2026-02-10T22:12:16.000Z"
         },
         "prod": {
           "dateTime": "2026-02-10T17:47:17.000Z"
