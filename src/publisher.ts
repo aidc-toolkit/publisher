@@ -379,6 +379,14 @@ export abstract class Publisher {
     protected abstract dependencyVersionFor(dependencyRepositoryName: string): string;
 
     /**
+     * Determine if repository change is valid for the phase.
+     *
+     * @returns
+     * True if repository change is valid for the phase.
+     */
+    protected abstract isValidRepositoryChange(): boolean;
+
+    /**
      * Determine if branch is valid for the phase.
      *
      * @returns
@@ -451,6 +459,33 @@ export abstract class Publisher {
         }
 
         return output;
+    }
+
+    /**
+     * Get the next branch in the versions or main if none.
+     *
+     * @returns
+     * Next branch or undefined if current branch is not a version branch.
+     */
+    protected getNextBranch(): string | undefined {
+        let nextBranch: string | undefined = undefined;
+        let nextBranchVersionIndex = this.configuration.versions.indexOf(this.repositoryPublishState.branch.substring(1));
+
+        if (nextBranchVersionIndex !== -1) {
+            while (nextBranch === undefined && ++nextBranchVersionIndex < this.configuration.versions.length) {
+                // Branch is version preceded by 'v'.
+                const candidateNextBranch = `v${this.configuration.versions[nextBranchVersionIndex]}`;
+
+                if (this.run(RunOptions.RunAlways, true, "git", "ls-remote", "--heads", "origin", candidateNextBranch).length !== 0) {
+                    // Next branch exists.
+                    nextBranch = candidateNextBranch;
+                }
+            }
+
+            nextBranch ??= "main";
+        }
+
+        return nextBranch;
     }
 
     /**
@@ -580,7 +615,7 @@ export abstract class Publisher {
             }
         }
 
-        if (this.phase !== "alpha" && this.run(RunOptions.RunAlways, true, "git", "fetch", "--porcelain", "--dry-run").length !== 0) {
+        if (this.run(RunOptions.RunAlways, true, "git", "fetch", "--porcelain", "--dry-run").length !== 0 && !this.isValidRepositoryChange()) {
             throw new Error("Remote repository has outstanding changes");
         }
 

@@ -59,6 +59,34 @@ class AlphaPublisher extends Publisher {
     /**
      * @inheritDoc
      */
+    protected override isValidRepositoryChange(): boolean {
+        const repositoryPublishState = this.repositoryPublishState;
+        const repository = repositoryPublishState.repository;
+
+        // Helper repositories don't have pull request processes.
+        if (repository.dependencyType !== "helper") {
+            const phaseStates = repository.phaseStates;
+
+            const alphaDateTime = phaseStates.alpha?.dateTime;
+            const prodDateTime = phaseStates.prod?.dateTime;
+            const nextBranch = this.getNextBranch();
+
+            if (alphaDateTime !== undefined && prodDateTime !== undefined && alphaDateTime.getTime() < prodDateTime.getTime() && nextBranch !== undefined) {
+                // Fetch all changes.
+                this.run(RunOptions.ParameterizeOnDryRun, false, "git", "fetch");
+
+                // Merge changes that were pushed to the next branch.
+                // TODO Review this; this will bring in everything, but want only merged pull requests.
+                this.run(RunOptions.ParameterizeOnDryRun, false, "git", "merge", `origin/${nextBranch}`);
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @inheritDoc
+     */
     protected override isValidBranch(): boolean {
         // Any branch is valid for alpha publication.
         return true;

@@ -122,6 +122,13 @@ export class NonAlphaPublisher extends Publisher {
     /**
      * @inheritDoc
      */
+    protected override isValidRepositoryChange(): boolean {
+        return false;
+    }
+
+    /**
+     * @inheritDoc
+     */
     protected override isValidBranch(): boolean {
         const repositoryPublishState = this.repositoryPublishState;
 
@@ -351,28 +358,14 @@ export class NonAlphaPublisher extends Publisher {
 
             // Helper repositories don't have version flow.
             if (repository.dependencyType !== "helper" && phase === "prod") {
-                let nextBranch: string | undefined = undefined;
-                let nextBranchVersionIndex = this.configuration.versions.indexOf(branch.substring(1));
-
-                while (nextBranch === undefined && ++nextBranchVersionIndex < this.configuration.versions.length) {
-                    // Branch is version preceded by 'v'.
-                    const candidateNextBranch = `v${this.configuration.versions[nextBranchVersionIndex]}`;
-
-                    if (this.run(RunOptions.RunAlways, true, "git", "ls-remote", "--heads", "origin", candidateNextBranch).length !== 0) {
-                        // Next branch exists.
-                        nextBranch = candidateNextBranch;
-                    }
-                }
-
-                nextBranch ??= "main";
-
                 await this.#runStep("pull request", async () =>
                     this.#octokit.rest.pulls.create({
                         owner: this.configuration.organization,
                         repo: repositoryPublishState.repositoryName,
                         title: `Production version ${repositoryPublishState.packageConfiguration.version}`,
                         head: branch,
-                        base: nextBranch
+                        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Branch is known to be a version branch.
+                        base: this.getNextBranch()!
                     })
                 );
             }
