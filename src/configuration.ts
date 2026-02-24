@@ -376,14 +376,14 @@ export function saveConfiguration(configuration: Configuration, logger: Logger<o
         }]))
     };
 
-    const saveSharedConfigurationJSON = `${JSON.stringify(jsonSharedConfiguration, null, 2)}\n`;
-    const saveLocalConfigurationJSON = `${JSON.stringify(jsonLocalConfiguration, null, 2)}\n`;
+    const saveSharedConfigurationJSON = JSON.stringify(jsonSharedConfiguration, null, 2);
+    const saveLocalConfigurationJSON = JSON.stringify(jsonLocalConfiguration, null, 2);
 
     if (dryRun) {
-        logger.info(`Dry run: Saving shared configuration\n${saveSharedConfigurationJSON}\n`);
-        logger.info(`Dry run: Saving local configuration\n${saveLocalConfigurationJSON}\n`);
+        logger.debug(`Dry run: Saving shared configuration\n${saveSharedConfigurationJSON}`);
+        logger.debug(`Dry run: Saving local configuration\n${saveLocalConfigurationJSON}`);
     } else {
-        fs.writeFileSync(SHARED_CONFIGURATION_PATH, saveSharedConfigurationJSON);
-        fs.writeFileSync(LOCAL_CONFIGURATION_PATH, saveLocalConfigurationJSON);
+        fs.writeFileSync(SHARED_CONFIGURATION_PATH, `${saveSharedConfigurationJSON}\n`);
+        fs.writeFileSync(LOCAL_CONFIGURATION_PATH, `${saveLocalConfigurationJSON}\n`);
     }
 }
