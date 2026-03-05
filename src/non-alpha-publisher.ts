@@ -179,22 +179,30 @@ export class NonAlphaPublisher extends Publisher {
      * Error message to throw if timed out waiting for job to start.
      */
     async #runJob(jobRunner: () => Promisable<JobState>, timeoutMessage: string): Promise<void> {
-        let jobState = "waiting";
         let waitCount = 0;
         let wasRunning = false;
+        let complete = false;
 
         do {
-            // Abort if job not started after two minutes.
-            if (jobState === "waiting" && waitCount++ === 60) {
-                throw new Error(timeoutMessage);
-            } else if (jobState === "running") {
-                wasRunning = true;
-                process.stdout.write(".");
-            }
+            // eslint-disable-next-line no-await-in-loop,@typescript-eslint/no-implied-eval -- Loop depends on awaited response.
+            switch (await setTimeout(2000).then(jobRunner)) {
+                case "waiting":
+                    // Abort if job still waiting after two minutes.
+                    if (++waitCount === 60) {
+                        throw new Error(timeoutMessage);
+                    }
+                    break;
 
-            // eslint-disable-next-line no-await-in-loop -- Loop depends on awaited response.
-            jobState = await setTimeout(2000).then(jobRunner);
-        } while (jobState !== "complete");
+                case "running":
+                    wasRunning = true;
+                    process.stdout.write(".");
+                    break;
+
+                case "complete":
+                    complete = true;
+                    break;
+            }
+        } while (!complete);
 
         if (wasRunning) {
             process.stdout.write("\n");
