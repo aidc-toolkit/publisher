@@ -1,3 +1,4 @@
+import type { Promisable } from "@aidc-toolkit/core";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as process from "node:process";
@@ -54,6 +55,11 @@ interface WorkflowConfiguration {
  * Publication steps.
  */
 type Step = "install" | "build" | "commit" | "tag" | "push" | "workflow (push)" | "release" | "workflow (release)" | "pull request" | "npm wait";
+
+/**
+ * Job states.
+ */
+type JobState = "waiting" | "running" | "complete";
 
 /**
  * Non-alpha release publisher.
@@ -147,7 +153,7 @@ export class NonAlphaPublisher extends Publisher {
      * @param stepRunner
      * Callback to execute step.
      */
-    async #runStep(step: Step, stepRunner: () => unknown): Promise<void> {
+    async #runStep(step: Step, stepRunner: () => Promisable<unknown>): Promise<void> {
         const publishStateStep = this.publishState.step;
 
         if (publishStateStep === undefined || publishStateStep === step) {
@@ -164,9 +170,39 @@ export class NonAlphaPublisher extends Publisher {
     }
 
     /**
-     * Validate the workflow by waiting for it to complete.
+     * Run a job. Waits up to 20 seconds for job to start and then runs until complete.
      *
-     * Branch on which workflow is running.
+     * @param jobRunner
+     * Job runner.
+     *
+     * @param timeoutMessage
+     * Error message to throw if timed out waiting for job to start.
+     */
+    async #runJob(jobRunner: () => Promisable<JobState>, timeoutMessage: string): Promise<void> {
+        let jobState = "waiting";
+        let waitCount = 0;
+        let wasRunning = false;
+
+        do {
+            // Abort if job not started after two minutes.
+            if (jobState === "waiting" && waitCount++ === 60) {
+                throw new Error(timeoutMessage);
+            } else if (jobState === "running") {
+                wasRunning = true;
+                process.stdout.write(".");
+            }
+
+            // eslint-disable-next-line no-await-in-loop -- Loop depends on awaited response.
+            jobState = await setTimeout(2000).then(jobRunner);
+        } while (jobState !== "complete");
+
+        if (wasRunning) {
+            process.stdout.write("\n");
+        }
+    }
+
+    /**
+     * Validate the workflow by waiting for it to complete.
      */
     async #validateWorkflow(): Promise<void> {
         if (this.dryRun) {
@@ -174,47 +210,38 @@ export class NonAlphaPublisher extends Publisher {
         } else {
             const commitSHA = this.run(RunOptions.RunAlways, true, false, "git", "rev-parse", this.repositoryPublishState.branch)[0];
 
-            let completed = false;
-            let queryCount = 0;
             let workflowRunID = -1;
 
-            do {
-                // eslint-disable-next-line no-await-in-loop -- Loop depends on awaited response.
-                const response = await setTimeout(2000).then(async () =>
-                    this.#octokit.rest.actions.listWorkflowRunsForRepo({
-                        owner: this.configuration.organization,
-                        repo: this.repositoryPublishState.repositoryName,
-                        head_sha: commitSHA
-                    })
-                );
+            await this.#runJob(async () =>
+                this.#octokit.rest.actions.listWorkflowRunsForRepo({
+                    owner: this.configuration.organization,
+                    repo: this.repositoryPublishState.repositoryName,
+                    head_sha: commitSHA
+                }).then((response) => {
+                    let jobState: JobState = "waiting";
 
-                for (const workflowRun of response.data.workflow_runs) {
-                    if (workflowRun.status !== "completed") {
-                        if (workflowRun.id === workflowRunID) {
-                            process.stdout.write(".");
-                        } else if (workflowRunID === -1) {
-                            workflowRunID = workflowRun.id;
+                    for (const workflowRun of response.data.workflow_runs) {
+                        if (workflowRun.status !== "completed") {
+                            jobState = "running";
 
-                            this.logger.info(`Workflow run ID ${workflowRunID}`);
-                        } else {
-                            throw new Error(`Parallel workflow runs for SHA ${commitSHA}`);
+                            if (workflowRunID === -1) {
+                                workflowRunID = workflowRun.id;
+
+                                this.logger.info(`Workflow run ID ${workflowRunID}`);
+                            } else if (workflowRun.id !== workflowRunID) {
+                                throw new Error(`Parallel workflow runs for SHA ${commitSHA}`);
+                            }
+                        } else if (workflowRun.id === workflowRunID) {
+                            if (workflowRun.conclusion !== "success") {
+                                throw new Error(`Workflow ${workflowRun.conclusion}`);
+                            }
+
+                            jobState = "complete";
                         }
-                    } else if (workflowRun.id === workflowRunID) {
-                        process.stdout.write("\n");
-
-                        if (workflowRun.conclusion !== "success") {
-                            throw new Error(`Workflow ${workflowRun.conclusion}`);
-                        }
-
-                        completed = true;
                     }
-                }
 
-                // Abort if workflow run not started after 10 queries.
-                if (++queryCount === 10 && workflowRunID === -1) {
-                    throw new Error(`Workflow run not started for SHA ${commitSHA}`);
-                }
-            } while (!completed);
+                    return jobState;
+                }), `Workflow run not started for SHA ${commitSHA}`);
         }
     }
 
@@ -272,7 +299,9 @@ export class NonAlphaPublisher extends Publisher {
         }
 
         if (!skip) {
-            const tag = `v${repositoryPublishState.packageConfiguration.version}`;
+            const packageConfiguration = repositoryPublishState.packageConfiguration;
+            const version = packageConfiguration.version;
+            const tag = `v${version}`;
 
             if (this.publishState.step !== undefined) {
                 this.logger.debug(`Repository failed at step "${this.publishState.step}" on prior run`);
@@ -362,7 +391,7 @@ export class NonAlphaPublisher extends Publisher {
                     this.#octokit.rest.pulls.create({
                         owner: this.configuration.organization,
                         repo: repositoryPublishState.repositoryName,
-                        title: `Production version ${repositoryPublishState.packageConfiguration.version}`,
+                        title: `Production version ${version}`,
                         head: branch,
                         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Branch is known to be a version branch.
                         base: this.getNextBranch()!
@@ -372,9 +401,17 @@ export class NonAlphaPublisher extends Publisher {
 
             // External repositories need to give the NPM registry time to reindex.
             if (repository.dependencyType === "external") {
-                await this.#runStep("npm wait", async () =>
-                    setTimeout(10000)
-                );
+                if (this.dryRun) {
+                    this.logger.info("Dry run: NPM wait");
+                } else {
+                    const packageSpecification = `${packageConfiguration.name}@${phase === "beta" ? "beta" : "latest"}`;
+
+                    await this.#runStep("npm wait", async () =>
+                        this.#runJob(() =>
+                            this.run(RunOptions.RunAlways, true, true, "npm", "view", packageSpecification, "version")[0] === version ? "complete" : "waiting", "NPM package publication not completed"
+                        )
+                    );
+                }
             }
 
             this.updatePhaseState({
