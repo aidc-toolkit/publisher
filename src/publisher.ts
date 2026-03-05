@@ -9,6 +9,7 @@ import {
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as process from "node:process";
+import readline from "node:readline";
 import type { Logger } from "tslog";
 import {
     type Configuration,
@@ -403,6 +404,9 @@ export abstract class Publisher {
      * @param captureOutput
      * If true, output is captured and returned.
      *
+     * @param allowErrorStatus
+     * If true, allow error status and return output anyway.
+     *
      * @param command
      * Command to run.
      *
@@ -412,7 +416,7 @@ export abstract class Publisher {
      * @returns
      * Output if captured or empty array if not.
      */
-    protected run(runOption: RunOption, captureOutput: boolean, command: string, ...args: string[]): string[] {
+    protected run(runOption: RunOption, captureOutput: boolean, allowErrorStatus: boolean, command: string, ...args: string[]): string[] {
         // Ignore run option if not in dry run mode.
         const effectiveRunOption = !this.dryRun ? RunOptions.RunAlways : runOption;
 
@@ -446,7 +450,7 @@ export abstract class Publisher {
                 throw new Error(`Terminated by signal ${spawnResult.signal}`);
             }
 
-            if (spawnResult.status !== 0) {
+            if (!allowErrorStatus && spawnResult.status !== 0) {
                 throw new Error(`Failed with status ${spawnResult.status}`);
             }
 
@@ -459,6 +463,56 @@ export abstract class Publisher {
         }
 
         return output;
+    }
+
+    /**
+     * Ask user a question and get an answer.
+     *
+     * @param question
+     * Question.
+     *
+     * @param validAnswers
+     * Valid answers. If provided, first element is default answer.
+     *
+     * @returns
+     * Answer.
+     */
+    protected async ask(question: string, validAnswers?: string[]): Promise<string> {
+        const readlineInterface = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+        });
+
+        /**
+         * Ask the question until the answer is valid.
+         *
+         * @returns
+         * Answer.
+         */
+        async function askUntilValid(): Promise<string> {
+            // eslint-disable-next-line promise/avoid-new -- Method doesn't meet promisify callback requirements.
+            return new Promise((resolve) => {
+                readlineInterface.question(question, (providedAnswer) => {
+                    let answer: string | undefined = undefined;
+
+                    if (validAnswers !== undefined && validAnswers.length !== 0) {
+                        if (providedAnswer === "") {
+                            answer = validAnswers[0];
+                        } else if (validAnswers.includes(providedAnswer)) {
+                            answer = providedAnswer;
+                        }
+                    } else {
+                        answer = providedAnswer;
+                    }
+
+                    resolve(answer ?? askUntilValid());
+                });
+            });
+        }
+
+        return askUntilValid().finally(() => {
+            readlineInterface.close();
+        });
     }
 
     /**
@@ -476,7 +530,7 @@ export abstract class Publisher {
                 // Branch is version preceded by 'v'.
                 const candidateNextBranch = `v${this.configuration.versions[nextBranchVersionIndex]}`;
 
-                if (this.run(RunOptions.RunAlways, true, "git", "ls-remote", "--heads", "origin", candidateNextBranch).length !== 0) {
+                if (this.run(RunOptions.RunAlways, true, false, "git", "ls-remote", "--heads", "origin", candidateNextBranch).length !== 0) {
                     // Next branch exists.
                     nextBranch = candidateNextBranch;
                 }
@@ -615,14 +669,14 @@ export abstract class Publisher {
             }
         }
 
-        if (this.run(RunOptions.RunAlways, true, "git", "fetch", "--porcelain", "--dry-run").length !== 0 && !this.isValidRepositoryChange()) {
+        if (this.run(RunOptions.RunAlways, true, false, "git", "fetch", "--porcelain", "--dry-run").length !== 0 && !this.isValidRepositoryChange()) {
             throw new Error("Remote repository has outstanding changes");
         }
 
         // Phase date/time is undefined if never before published.
         if (phaseDateTime !== undefined) {
             // Get all files committed since last published.
-            for (const line of this.run(RunOptions.RunAlways, true, "git", "log", "--since", phaseDateTime.toISOString(), "--name-status", "--reverse", "--pretty=oneline")) {
+            for (const line of this.run(RunOptions.RunAlways, true, false, "git", "log", "--since", phaseDateTime.toISOString(), "--name-status", "--reverse", "--pretty=oneline")) {
                 // Header starts with 40-character SHA.
                 if (/^[0-9a-f]{40} /u.test(line)) {
                     logger.debug(`Commit SHA ${line.substring(0, 40)}`);
@@ -635,7 +689,7 @@ export abstract class Publisher {
             }
 
             // Get all uncommitted files.
-            const output = this.run(RunOptions.RunAlways, true, "git", "status", "--porcelain");
+            const output = this.run(RunOptions.RunAlways, true, false, "git", "status", "--porcelain");
 
             if (output.length !== 0) {
                 const committedCount = changedFilesSet.size;
@@ -703,7 +757,7 @@ export abstract class Publisher {
         if (files.length === 0) {
             modifiedFiles.push("--all");
         } else {
-            for (const line of this.run(RunOptions.RunAlways, true, "git", "status", ...files, "--porcelain")) {
+            for (const line of this.run(RunOptions.RunAlways, true, false, "git", "status", ...files, "--porcelain")) {
                 const status = line.substring(0, 2);
                 const modifiedFile = line.substring(3);
 
@@ -717,7 +771,7 @@ export abstract class Publisher {
         }
 
         if (modifiedFiles.length !== 0) {
-            this.run(RunOptions.ParameterizeOnDryRun, false, "git", "commit", ...modifiedFiles, "--message", message);
+            this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "commit", ...modifiedFiles, "--message", message);
         }
     }
 
@@ -742,7 +796,7 @@ export abstract class Publisher {
      */
     protected updatePackageLockConfiguration(): void {
         // Run "npm install" to update package configuration lock file.
-        this.run(RunOptions.ParameterizeOnDryRun, false, "npm", "install");
+        this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "install");
     }
 
     /**
@@ -770,7 +824,7 @@ export abstract class Publisher {
             }
 
             if (addToGit) {
-                this.run(RunOptions.ParameterizeOnDryRun, false, "git", "add", Publisher.#SOURCE_VERSION_PATH);
+                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "add", Publisher.#SOURCE_VERSION_PATH);
             }
         }
     }
@@ -909,7 +963,7 @@ export abstract class Publisher {
 
         const phaseDateTime = this.#getPhaseDateTime(false, "Repository", repositoryName, repository);
 
-        const branch = this.run(RunOptions.RunAlways, true, "git", "branch", "--show-current")[0];
+        const branch = this.run(RunOptions.RunAlways, true, false, "git", "branch", "--show-current")[0];
 
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Package configuration format is known.
         const packageConfiguration = JSON.parse(fs.readFileSync(Publisher.#PACKAGE_CONFIGURATION_PATH).toString()) as PackageConfiguration;

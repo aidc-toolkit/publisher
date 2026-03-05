@@ -172,7 +172,7 @@ export class NonAlphaPublisher extends Publisher {
         if (this.dryRun) {
             this.logger.info("Dry run: Validate workflow");
         } else {
-            const commitSHA = this.run(RunOptions.RunAlways, true, "git", "rev-parse", this.repositoryPublishState.branch)[0];
+            const commitSHA = this.run(RunOptions.RunAlways, true, false, "git", "rev-parse", this.repositoryPublishState.branch)[0];
 
             let completed = false;
             let queryCount = 0;
@@ -252,7 +252,7 @@ export class NonAlphaPublisher extends Publisher {
 
             // Alpha phase uses local registry.
             if (previousPhase === "alpha") {
-                this.run(RunOptions.SkipOnDryRun, false, "npm", "config", "delete", this.atOrganizationRegistry, "--location", "project");
+                this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", "delete", this.atOrganizationRegistry, "--location", "project");
             }
         } else if (preReleasePhase === phase) {
             // Ignore changes after publication process has started.
@@ -309,7 +309,7 @@ export class NonAlphaPublisher extends Publisher {
             });
 
             await this.#runStep("build", () => {
-                this.run(RunOptions.SkipOnDryRun, false, "npm", "run", `build:${phase}`, "--if-present");
+                this.run(RunOptions.SkipOnDryRun, false, false, "npm", "run", `build:${phase}`, "--if-present");
             });
 
             await this.#runStep("commit", () => {
@@ -319,12 +319,12 @@ export class NonAlphaPublisher extends Publisher {
             // Helper repositories don't use tags.
             if (repository.dependencyType !== "helper") {
                 await this.#runStep("tag", () => {
-                    this.run(RunOptions.SkipOnDryRun, false, "git", "tag", tag);
+                    this.run(RunOptions.SkipOnDryRun, false, false, "git", "tag", tag);
                 });
             }
 
             await this.#runStep("push", () => {
-                this.run(RunOptions.ParameterizeOnDryRun, false, "git", "push", "--atomic", "origin", branch, ...repository.dependencyType !== "helper" ? [tag] : []);
+                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "push", "--atomic", "origin", branch, ...repository.dependencyType !== "helper" ? [tag] : []);
             });
 
             if (hasPushWorkflow) {
@@ -391,7 +391,7 @@ export class NonAlphaPublisher extends Publisher {
 
         this.commitModified(`Published ${this.phase} release.`, SHARED_CONFIGURATION_PATH);
 
-        this.run(RunOptions.ParameterizeOnDryRun, false, "git", "push", "--atomic", "origin", this.repositoryPublishState.branch);
+        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "push", "--atomic", "origin", this.repositoryPublishState.branch);
     }
 }
 

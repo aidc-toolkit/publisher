@@ -73,11 +73,11 @@ class AlphaPublisher extends Publisher {
 
             if (alphaDateTime !== undefined && prodDateTime !== undefined && alphaDateTime.getTime() < prodDateTime.getTime() && nextBranch !== undefined) {
                 // Fetch all changes.
-                this.run(RunOptions.ParameterizeOnDryRun, false, "git", "fetch");
+                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "fetch");
 
                 // Merge changes that were pushed to the next branch.
                 // TODO Review this; this will bring in everything, but want only merged pull requests.
-                this.run(RunOptions.ParameterizeOnDryRun, false, "git", "merge", `origin/${nextBranch}`);
+                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "merge", `origin/${nextBranch}`);
             }
         }
 
@@ -197,15 +197,36 @@ class AlphaPublisher extends Publisher {
             for (const currentDependencies of [packageConfiguration.devDependencies, packageConfiguration.dependencies]) {
                 if (currentDependencies !== undefined) {
                     for (const [dependencyPackageName, version] of Object.entries(currentDependencies)) {
-                        // Ignore organization dependencies.
-                        if (this.dependencyRepositoryName(dependencyPackageName) === null && version.startsWith("^")) {
-                            const [latestVersion] = this.run(RunOptions.RunAlways, true, "npm", "view", dependencyPackageName, "version");
+                        const versionQualifier = version.charAt(0);
 
-                            if (latestVersion !== version.substring(1)) {
-                                this.logger.info(`Dependency ${dependencyPackageName}@${version} ${!this.#updateAll ? "pending update" : "updating"} to version ${latestVersion}.`);
+                        // Ignore organization dependencies and any version that goes beyond basic major and major.minor versioning.
+                        if (this.dependencyRepositoryName(dependencyPackageName) === null && (versionQualifier === "^" || versionQualifier === "~")) {
+                            const outdatedOutput = this.run(RunOptions.RunAlways, true, true, "npm", "outdated", dependencyPackageName, "--long");
+
+                            const repositoryOutdatedOutput = outdatedOutput.slice(1).map(line => line.split(/\s+/ug)).find(components => components[5] === repositoryPublishState.repositoryName);
+
+                            if (repositoryOutdatedOutput !== undefined) {
+                                const [wantedVersion, latestVersion] = repositoryOutdatedOutput.slice(2);
+                                const simpleUpdatePending = wantedVersion !== version.substring(1);
+                                const significantUpdatePending = latestVersion !== wantedVersion;
+
+                                if (simpleUpdatePending) {
+                                    this.logger.info(`Dependency ${dependencyPackageName}@${version} ${!this.#updateAll ? "pending update" : "updating"} to version ${wantedVersion}.`);
+                                }
+
+                                if (significantUpdatePending) {
+                                    this.logger.warn(`Dependency ${dependencyPackageName}@${version} has ${versionQualifier === "^" ? "major" : "minor"} update pending to ${latestVersion}.`);
+                                }
 
                                 if (this.#updateAll) {
-                                    currentDependencies[dependencyPackageName] = `^${latestVersion}`;
+                                    let updateVersion = wantedVersion;
+
+                                    // eslint-disable-next-line no-await-in-loop -- Can't proceed without getting an answer.
+                                    if (significantUpdatePending && !this.dryRun && await this.ask(`Update ${dependencyPackageName} to 1) ${wantedVersion} (${simpleUpdatePending ? "" : "no change, "}default) or 2) ${latestVersion}? [1/2] `, ["1", "2"]) === "2") {
+                                        updateVersion = latestVersion;
+                                    }
+
+                                    currentDependencies[dependencyPackageName] = `${versionQualifier}${updateVersion}`;
 
                                     repositoryPublishState.savePackageConfigurationPending = true;
                                 }
@@ -220,31 +241,32 @@ class AlphaPublisher extends Publisher {
             this.savePackageConfiguration();
         }
 
-        if (this.#updateAll) {
-            this.run(RunOptions.ParameterizeOnDryRun, false, "npm", "update");
-        }
-
         // Nothing to do if there are no changes and dependencies haven't been updated.
         if (this.anyChanges(repositoryPublishState.phaseDateTime) || repositoryPublishState.anyDependenciesUpdated) {
             const switchToAlpha = repositoryPublishState.preReleaseIdentifier !== "alpha";
 
             if (switchToAlpha) {
                 // Use specified registry for organization until no longer in alpha mode.
-                this.run(RunOptions.SkipOnDryRun, false, "npm", "config", "set", this.atOrganizationRegistry, "--location", "project");
+                this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", "set", this.atOrganizationRegistry, "--location", "project");
 
                 this.updatePackageVersion(undefined, undefined, repositoryPublishState.patchVersion + 1, "alpha");
             }
 
-            // Update the package lock configuration to pick up any changes prior to this point.
-            this.updatePackageLockConfiguration();
+            if (!this.#updateAll) {
+                // Update the package lock configuration to pick up any changes prior to this point.
+                this.updatePackageLockConfiguration();
+            } else {
+                // Update all dependencies.
+                this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "update");
+            }
 
             // Run generate source if present.
-            this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "generate-source", "--if-present");
+            this.run(RunOptions.SkipOnDryRun, false, false, "npm", "run", "generate-source", "--if-present");
 
             // Skip lint and localization checks if in fast mode.
             if (!this.#fast) {
                 // Run lint if present.
-                this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "lint", "--if-present");
+                this.run(RunOptions.SkipOnDryRun, false, false, "npm", "run", "lint", "--if-present");
 
                 const localePath = path.resolve("src/locale");
 
@@ -288,11 +310,11 @@ class AlphaPublisher extends Publisher {
             }
 
             // Run alpha build.
-            this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "build:alpha");
+            this.run(RunOptions.SkipOnDryRun, false, false, "npm", "run", "build:alpha");
 
             // Run test if present and not in fast mode.
             if (!this.#fast) {
-                this.run(RunOptions.SkipOnDryRun, false, "npm", "run", "test", "--if-present");
+                this.run(RunOptions.SkipOnDryRun, false, false, "npm", "run", "test", "--if-present");
             }
 
             // Nothing further required if this repository is not a dependency of others.
@@ -306,13 +328,13 @@ class AlphaPublisher extends Publisher {
 
                 try {
                     // Publish to development NPM registry.
-                    this.run(RunOptions.ParameterizeOnDryRun, false, "npm", "publish", "--tag", "alpha");
+                    this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "publish", "--tag", "alpha");
 
                     // Unpublish all prior alpha versions.
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Output is a JSON array.
-                    for (const priorVersion of JSON.parse(this.run(RunOptions.RunAlways, true, "npm", "view", packageConfiguration.name, "versions", "--json").join("\n")) as string[]) {
+                    for (const priorVersion of JSON.parse(this.run(RunOptions.RunAlways, true, false, "npm", "view", packageConfiguration.name, "versions", "--json").join("\n")) as string[]) {
                         if (/^\d+.\d+.\d+-alpha.\d+$/u.test(priorVersion) && priorVersion !== version) {
-                            this.run(RunOptions.ParameterizeOnDryRun, false, "npm", "unpublish", `${packageConfiguration.name}@${priorVersion}`);
+                            this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "unpublish", `${packageConfiguration.name}@${priorVersion}`);
                         }
                     }
                 } finally {
