@@ -53,7 +53,8 @@ class AlphaPublisher extends Publisher {
             throw new Error(`*** Internal error *** Version not set for dependency ${dependencyRepositoryName}`);
         }
 
-        return phaseStateVersion;
+        // Compatible phase state version syntax will detect updates.
+        return `^${phaseStateVersion.substring(0, phaseStateVersion.lastIndexOf("."))}`;
     }
 
     /**
@@ -186,6 +187,29 @@ class AlphaPublisher extends Publisher {
     }
 
     /**
+     * Check for updates with the specified target.
+     *
+     * @param target
+     * Target.
+     *
+     * @returns
+     * Updated versions mapped by package name.
+     */
+    private checkUpdates(target: string): Map<string, string> {
+        const updatesMap = new Map<string, string>();
+
+        for (const line of this.run(RunOptions.RunAlways, true, true, "ncu", "--target", target)) {
+            if (line.startsWith(" ")) {
+                const components = line.split(/ +/ug);
+
+                updatesMap.set(components[1], components[components.length - 1]);
+            }
+        }
+
+        return updatesMap;
+    }
+
+    /**
      * @inheritDoc
      */
     protected override async publish(): Promise<void> {
@@ -194,41 +218,61 @@ class AlphaPublisher extends Publisher {
 
         // Check for external updates, even if there are no changes, if not in fast mode and working on the latest version.
         if (!this.#fast && repositoryPublishState.repository.workingVersion === this.latestVersion) {
+            const semverUpdatesMap = this.checkUpdates("semver");
+            const latestUpdatesMap = this.checkUpdates("latest");
+
+            const updatesMap = new Map<string, {
+                semverVersion?: string;
+                latestVersion?: string;
+            }>();
+
+            for (const [packageName, semverVersion] of semverUpdatesMap) {
+                updatesMap.set(packageName, {
+                    semverVersion
+                });
+            }
+
+            for (const [packageName, latestVersion] of latestUpdatesMap) {
+                const update = updatesMap.get(packageName);
+
+                if (update !== undefined) {
+                    update.latestVersion = latestVersion;
+                } else {
+                    updatesMap.set(packageName, {
+                        latestVersion
+                    });
+                }
+            }
+
             for (const currentDependencies of [packageConfiguration.devDependencies, packageConfiguration.dependencies]) {
                 if (currentDependencies !== undefined) {
                     for (const [dependencyPackageName, version] of Object.entries(currentDependencies)) {
-                        const versionQualifier = version.charAt(0);
+                        // Ignore organization dependencies and any version that goes beyond basic compatible and approximate versions.
+                        if (this.dependencyRepositoryName(dependencyPackageName) === null && (version.startsWith("^") || version.startsWith("~"))) {
+                            const update = updatesMap.get(dependencyPackageName);
 
-                        // Ignore organization dependencies and any version that goes beyond basic major and major.minor versioning.
-                        if (this.dependencyRepositoryName(dependencyPackageName) === null && (versionQualifier === "^" || versionQualifier === "~")) {
-                            const outdatedOutput = this.run(RunOptions.RunAlways, true, true, "npm", "outdated", dependencyPackageName, "--long");
+                            if (update !== undefined) {
+                                const compatibleUpdatePending = update.semverVersion !== undefined;
+                                const incompatibleUpdatePending = update.latestVersion !== undefined && update.latestVersion !== update.semverVersion;
+                                const manualUpdatePending = incompatibleUpdatePending && version.includes(" ");
 
-                            const repositoryOutdatedOutput = outdatedOutput.slice(1).map(line => line.split(/\s+/ug)).find(components => components[5] === repositoryPublishState.repositoryName);
-
-                            if (repositoryOutdatedOutput !== undefined) {
-                                const [wantedVersion, latestVersion] = repositoryOutdatedOutput.slice(2);
-                                const simpleUpdatePending = wantedVersion !== version.substring(1);
-                                const significantUpdatePending = latestVersion !== wantedVersion;
-
-                                if (simpleUpdatePending) {
-                                    this.logger.info(`Dependency ${dependencyPackageName}@${version} ${!this.#updateAll ? "pending update" : "updating"} to version ${wantedVersion}.`);
+                                if (compatibleUpdatePending) {
+                                    this.logger.info(`Dependency ${dependencyPackageName} ${!this.#updateAll ? "pending update" : "updating"} from version ${version} to version ${update.semverVersion}.`);
                                 }
 
-                                if (significantUpdatePending) {
-                                    this.logger.warn(`Dependency ${dependencyPackageName}@${version} has ${versionQualifier === "^" ? "major" : "minor"} update pending to ${latestVersion}.`);
+                                if (incompatibleUpdatePending) {
+                                    this.logger.warn(`Dependency ${dependencyPackageName} has ${!manualUpdatePending ? "incompatible" : "manual"} update pending from version ${version} to ${update.latestVersion}.`);
                                 }
 
-                                if (this.#updateAll) {
-                                    let updateVersion = wantedVersion;
-
+                                if (this.#updateAll && !manualUpdatePending) {
                                     // eslint-disable-next-line no-await-in-loop -- Can't proceed without getting an answer.
-                                    if (significantUpdatePending && !this.dryRun && await this.ask(`Update ${dependencyPackageName} to 1) ${wantedVersion} (${simpleUpdatePending ? "" : "no change, "}default) or 2) ${latestVersion}? [1/2] `, ["1", "2"]) === "2") {
-                                        updateVersion = latestVersion;
+                                    const updateVersion = incompatibleUpdatePending && !this.dryRun && await this.ask(`Update ${dependencyPackageName} to 1) ${compatibleUpdatePending ? update.semverVersion : version} (${compatibleUpdatePending ? "" : "no change, "}default) or 2) ${update.latestVersion}? [1/2] `, ["1", "2"]) === "1" ? update.semverVersion : update.latestVersion;
+
+                                    if (updateVersion !== undefined) {
+                                        currentDependencies[dependencyPackageName] = updateVersion;
+
+                                        repositoryPublishState.savePackageConfigurationPending = true;
                                     }
-
-                                    currentDependencies[dependencyPackageName] = `${versionQualifier}${updateVersion}`;
-
-                                    repositoryPublishState.savePackageConfigurationPending = true;
                                 }
                             }
                         }

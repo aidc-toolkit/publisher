@@ -1021,6 +1021,8 @@ export abstract class Publisher {
         // eslint-disable-next-line no-param-reassign -- Repository is necessarily updated as part of building publish state.
         repository.workingVersion = `${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}`;
 
+        const updateDependencyPackageNames: string[] = [];
+
         for (const dependencies of [packageConfiguration.devDependencies ?? {}, packageConfiguration.dependencies ?? {}]) {
             for (const dependencyPackageName of Object.keys(dependencies)) {
                 const dependencyRepositoryName = this.dependencyRepositoryName(dependencyPackageName);
@@ -1030,13 +1032,24 @@ export abstract class Publisher {
                     this.logger.trace(`Organization dependency ${dependencyPackageName} from package configuration`);
 
                     if (this.#isOrganizationDependencyUpdated(phaseDateTime, dependencyRepositoryName, false)) {
-                        // Update dependency version to match latest update.
-                        dependencies[dependencyPackageName] = this.dependencyVersionFor(dependencyRepositoryName);
+                        const dependencyRepositoryVersion = this.dependencyVersionFor(dependencyRepositoryName);
+
+                        if (dependencies[dependencyPackageName] !== dependencyRepositoryVersion) {
+                            // Dependency will be updated alongside all other dependencies.
+                            dependencies[dependencyPackageName] = dependencyRepositoryVersion;
+                        } else {
+                            updateDependencyPackageNames.push(dependencyPackageName);
+                        }
 
                         repositoryPublishState.anyDependenciesUpdated = true;
                     }
                 }
             }
+        }
+
+        if (updateDependencyPackageNames.length !== 0) {
+            // Run "npm update" to force update of repository packages whose configured version didn't change.
+            this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "update", ...updateDependencyPackageNames);
         }
 
         // Saving the package configuration would affect check for any changes so defer it.
