@@ -288,6 +288,9 @@ export class NonAlphaPublisher extends Publisher {
             // Alpha phase uses local registry.
             if (previousPhase === "alpha") {
                 this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", "delete", this.atOrganizationRegistry, "--location", "project");
+
+                // Patch package-lock.json with default registry in case some beta versions were installed indirectly.
+                this.run(RunOptions.SkipOnDryRun, false, false, "sed", "-i", "", "-e", `s/${this.configuration.alphaRegistry.replace(/(?<c>[./])/ug, "\\$<c>")}/https:\\/\\/registry\\.npmjs\\.org\\//`, "package-lock.json");
             }
         } else if (preReleasePhase === phase) {
             // Ignore changes after publication process has started.
