@@ -35,5 +35,9 @@
   },
   "dependencies": {
     "@aidc-toolkit/core": "^1.0.49-alpha"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "fsevents": true
   }
 }
