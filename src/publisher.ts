@@ -390,10 +390,22 @@ export abstract class Publisher {
     /**
      * Determine if branch is valid for the phase.
      *
+     * @param repository
+     * Repository.
+     *
+     * @param branch
+     * Branch.
+     *
+     * @param majorVersion
+     * Major version.
+     *
+     * @param minorVersion
+     * Minor version.
+     *
      * @returns
      * True if branch is valid for the phase.
      */
-    protected abstract isValidBranch(): boolean;
+    protected abstract isValidBranch(repository: Repository, branch: string, majorVersion: number, minorVersion: number): boolean;
 
     /**
      * Run a command and optionally capture its output.
@@ -975,7 +987,7 @@ export abstract class Publisher {
             preReleaseIdentifier
         } = parseVersion(packageConfiguration.version);
 
-        if (!this.isValidBranch()) {
+        if (!this.isValidBranch(repository, branch, majorVersion, minorVersion)) {
             throw new Error(`Branch ${branch} is not valid for ${this.phase} phase`);
         }
 

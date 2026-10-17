@@ -6,7 +6,7 @@ import { setTimeout } from "node:timers/promises";
 import { Octokit } from "octokit";
 import { parse as yamlParse } from "yaml";
 import secureConfigurationJSON from "../config/publisher.secure.json" with { type: "json" };
-import { NEXT_PHASE, type Phase, PREVIOUS_PHASE, SHARED_CONFIGURATION_PATH } from "./configuration.js";
+import { NEXT_PHASE, type Phase, PREVIOUS_PHASE, type Repository, SHARED_CONFIGURATION_PATH } from "./configuration.js";
 import { Publisher, RunOptions } from "./publisher.js";
 
 /**
@@ -135,11 +135,9 @@ export class NonAlphaPublisher extends Publisher {
     /**
      * @inheritDoc
      */
-    protected override isValidBranch(): boolean {
-        const repositoryPublishState = this.repositoryPublishState;
-
+    protected override isValidBranch(repository: Repository, branch: string, majorVersion: number, minorVersion: number): boolean {
         // Branch for non-alpha phase must match version for anything other than helper repository.
-        return repositoryPublishState.repository.dependencyType === "helper" || repositoryPublishState.branch === `v${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}`;
+        return repository.dependencyType === "helper" || branch === `v${majorVersion}.${minorVersion}`;
     }
 
     /**
