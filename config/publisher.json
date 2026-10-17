@@ -85,8 +85,8 @@
       "dependencyType": "external",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-10-17T00:59:59.000Z",
-          "version": "1.0.55-beta"
+          "dateTime": "2026-10-17T14:31:05.000Z",
+          "version": "1.0.56-beta"
         },
         "prod": {
           "version": "1.0.54",
@@ -98,7 +98,7 @@
       "dependencyType": "application",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-10-17T01:00:06.000Z"
+          "dateTime": "2026-10-17T14:31:14.000Z"
         },
         "prod": {
           "dateTime": "2026-06-06T11:20:21.000Z"
@@ -109,7 +109,7 @@
       "dependencyType": "application",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-10-17T01:00:17.000Z"
+          "dateTime": "2026-10-17T14:31:25.000Z"
         },
         "prod": {
           "dateTime": "2026-06-06T11:20:35.000Z"
@@ -125,7 +125,7 @@
       ],
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-10-17T01:03:43.000Z"
+          "dateTime": "2026-10-17T14:34:43.000Z"
         },
         "prod": {
           "dateTime": "2026-06-06T11:23:35.000Z"
