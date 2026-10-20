@@ -1151,7 +1151,7 @@ export abstract class Publisher {
 
             this.#saveConfiguration();
         } catch (e) {
-            this.logger.error(e);
+            this.logger.error("Publish all failed", e);
         }
     }
 
