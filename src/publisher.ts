@@ -695,7 +695,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
         if (parsedBranchGroups !== undefined) {
             const branchMajorVersion = Number(parsedBranchGroups["branchMajorVersion"]);
             const branchMinorVersion = Number(parsedBranchGroups["branchMinorVersion"]);
-            
+
             const parsedVersion = repository.parsedVersion;
 
             // If version doesn't match, branch is new.
