@@ -400,6 +400,6 @@ const argv = process.argv;
 const publisher = new AlphaPublisher(argv.includes("--fast"), argv.includes("--update-all"), argv.includes("--dry-run"));
 
 publisher.publishAll().catch((e: unknown) => {
-    publisher.logger.error(e);
+    publisher.logger.error("Publisher failed", e);
     process.exit(1);
 });
