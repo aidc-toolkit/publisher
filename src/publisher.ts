@@ -390,22 +390,10 @@ export abstract class Publisher {
     /**
      * Determine if branch is valid for the phase.
      *
-     * @param repository
-     * Repository.
-     *
-     * @param branch
-     * Branch.
-     *
-     * @param majorVersion
-     * Major version.
-     *
-     * @param minorVersion
-     * Minor version.
-     *
      * @returns
      * True if branch is valid for the phase.
      */
-    protected abstract isValidBranch(repository: Repository, branch: string, majorVersion: number, minorVersion: number): boolean;
+    protected abstract isValidBranch(): boolean;
 
     /**
      * Run a command and optionally capture its output.
@@ -980,42 +968,12 @@ export abstract class Publisher {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Package configuration format is known.
         const packageConfiguration = JSON.parse(fs.readFileSync(Publisher.#PACKAGE_CONFIGURATION_PATH).toString()) as PackageConfiguration;
 
-        let {
+        const {
             majorVersion,
             minorVersion,
             patchVersion,
             preReleaseIdentifier
         } = parseVersion(packageConfiguration.version);
-
-        if (!this.isValidBranch(repository, branch, majorVersion, minorVersion)) {
-            throw new Error(`Branch ${branch} is not valid for ${this.phase} phase`);
-        }
-
-        const parsedBranchGroups = /^v(?<branchMajorVersion>\d+)\.(?<branchMinorVersion>\d+)/u.exec(
-            // Helper repositories are always treated as if on a version branch.
-            repository.dependencyType !== "helper" ? branch : `v${majorVersion}.${minorVersion}`
-        )?.groups;
-
-        // If this is a version branch, update the package version if required.
-        if (parsedBranchGroups !== undefined) {
-            const branchMajorVersion = Number(parsedBranchGroups["branchMajorVersion"]);
-            const branchMinorVersion = Number(parsedBranchGroups["branchMinorVersion"]);
-
-            // If in a version branch and version doesn't match, update it.
-            if (majorVersion !== branchMajorVersion || minorVersion !== branchMinorVersion) {
-                if (majorVersion !== branchMajorVersion ? majorVersion !== branchMajorVersion - 1 || branchMinorVersion !== 0 : minorVersion !== branchMinorVersion - 1) {
-                    throw new Error(`Invalid transition from ${majorVersion}.${minorVersion} to ${branchMajorVersion}.${branchMinorVersion}`);
-                }
-
-                majorVersion = branchMajorVersion;
-                minorVersion = branchMinorVersion;
-                patchVersion = 0;
-                preReleaseIdentifier = undefined;
-
-                this.updatePackageVersion(branchMajorVersion, branchMinorVersion, 0, null);
-                this.commitUpdatedPackageVersion(Publisher.#PACKAGE_CONFIGURATION_PATH);
-            }
-        }
 
         this.#repositoryPublishState = {
             repositoryName,
@@ -1033,6 +991,38 @@ export abstract class Publisher {
         };
 
         const repositoryPublishState = this.#repositoryPublishState;
+
+        if (!this.isValidBranch()) {
+            throw new Error(`Branch ${branch} is not valid for ${this.phase} phase`);
+        }
+
+        const parsedBranchGroups = /^v(?<branchMajorVersion>\d+)\.(?<branchMinorVersion>\d+)/u.exec(
+            // Helper repositories are always treated as if on the latest version branch.
+            repository.dependencyType !== "helper" ? branch : `v${this.latestVersion}`
+        )?.groups;
+
+        // If this is a version branch, update the package version if required.
+        if (parsedBranchGroups !== undefined) {
+            const branchMajorVersion = Number(parsedBranchGroups["branchMajorVersion"]);
+            const branchMinorVersion = Number(parsedBranchGroups["branchMinorVersion"]);
+
+            // If in a version branch and version doesn't match, update it.
+            if (majorVersion !== branchMajorVersion || minorVersion !== branchMinorVersion) {
+                if (this.phase !== "alpha") {
+                    throw new Error("Version transition not permitted except in alpha phase");
+                }
+
+                if (majorVersion !== branchMajorVersion ? majorVersion !== branchMajorVersion - 1 || branchMinorVersion !== 0 : minorVersion !== branchMinorVersion - 1) {
+                    throw new Error(`Invalid transition from ${majorVersion}.${minorVersion} to ${branchMajorVersion}.${branchMinorVersion}`);
+                }
+
+                this.updatePackageVersion(branchMajorVersion, branchMinorVersion, 0, null);
+                this.commitUpdatedPackageVersion(Publisher.#PACKAGE_CONFIGURATION_PATH);
+
+                // Patch version is set to -1 to allow switch to alpha to start at 0.
+                repositoryPublishState.patchVersion = -1;
+            }
+        }
 
         // Version in repository publish state will be updated if in a new branch.
         // eslint-disable-next-line no-param-reassign -- Repository is necessarily updated as part of building publish state.
@@ -1055,7 +1045,7 @@ export abstract class Publisher {
                         const dependencyParsedVersion = parseVersion(`${dependencyWorkingVersion}.0`);
 
                         // Verify that current repository has a version not less than that of any dependency.
-                        if (majorVersion < dependencyParsedVersion.majorVersion || (majorVersion === dependencyParsedVersion.majorVersion && (minorVersion < dependencyParsedVersion.minorVersion || (minorVersion === dependencyParsedVersion.minorVersion && patchVersion < dependencyParsedVersion.patchVersion)))) {
+                        if (repositoryPublishState.majorVersion < dependencyParsedVersion.majorVersion || (repositoryPublishState.majorVersion === dependencyParsedVersion.majorVersion && (repositoryPublishState.minorVersion < dependencyParsedVersion.minorVersion || (repositoryPublishState.minorVersion === dependencyParsedVersion.minorVersion && (repositoryPublishState.patchVersion !== -1 ? repositoryPublishState.patchVersion : 0) < dependencyParsedVersion.patchVersion)))) {
                             throw new Error(`Repository version ${packageConfiguration.version} is less than ${dependencyRepositoryName} dependency version ${dependencyWorkingVersion}`);
                         }
 
