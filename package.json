@@ -21,7 +21,7 @@
   },
   "scripts": {
     "lint": "eslint",
-    "build:alpha": "tsc --noEmit && tsc --project tsconfig-config.json --noEmit",
+    "build:alpha": "tsc --project tsconfig-src.json --noEmit && tsc --project tsconfig-config.json --noEmit",
     "publish-alpha": "tsx src/alpha-publisher.ts $*",
     "publish-beta": "tsx src/non-alpha-publisher.ts beta $*",
     "publish-prod": "tsx src/non-alpha-publisher.ts prod $*"
