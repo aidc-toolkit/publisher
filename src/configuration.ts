@@ -130,6 +130,11 @@ interface LocalRepository {
     workingVersion: string;
 
     /**
+     * Organization dependency package names included in package configuration, updated during build.
+     */
+    dependencyPackageNames?: string[];
+
+    /**
      * Alpha phase state.
      */
     readonly phaseStates?: Readonly<Partial<Record<"alpha", PhaseState>>>;
@@ -361,18 +366,18 @@ function toJSONPhaseStates(phaseStates: Readonly<Partial<Record<Phase, PhaseStat
  */
 export function saveConfiguration(configuration: Configuration, logger: Logger<object>, dryRun: boolean): void {
     jsonSharedConfiguration = {
-        ...pick(configuration, "versions", "organization"),
+        ...pick(configuration as SharedConfiguration, "versions", "organization"),
         repositories: Object.fromEntries(Object.entries(configuration.repositories).map(([repositoryName, repository]) => [repositoryName, {
-            ...pick(repository, "directory", "dependencyType", "additionalDependencies", "excludePaths"),
-            phaseStates: toJSONPhaseStates(pick(repository.phaseStates, "beta", "prod"))
+            ...pick(repository as SharedRepository, "directory", "dependencyType", "additionalDependencies", "excludePaths"),
+            phaseStates: toJSONPhaseStates(pick(repository.phaseStates as NonNullable<SharedRepository["phaseStates"]>, "beta", "prod"))
         }]))
     };
 
     jsonLocalConfiguration = {
-        ...pick(configuration, "logLevel", "additionalArgs", "alphaRegistry", "publishState"),
+        ...pick(configuration as LocalConfiguration, "logLevel", "additionalArgs", "alphaRegistry", "publishState"),
         repositories: Object.fromEntries(Object.entries(configuration.repositories).map(([repositoryName, repository]) => [repositoryName, {
-            ...pick(repository, "workingVersion"),
-            phaseStates: toJSONPhaseStates(pick(repository.phaseStates, "alpha"))
+            ...pick(repository as LocalRepository, "workingVersion", "dependencyPackageNames"),
+            phaseStates: toJSONPhaseStates(pick(repository.phaseStates as NonNullable<LocalRepository["phaseStates"]>, "alpha"))
         }]))
     };
 
