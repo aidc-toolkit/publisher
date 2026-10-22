@@ -108,6 +108,11 @@ export interface RepositoryPublishState {
     savePackageConfigurationPending: boolean;
 
     /**
+     * Dependency package names, including those that are dependencies of dependencies.
+     */
+    dependencyPackageNames: string[];
+
+    /**
      * True if any dependencies, including additional, have been updated.
      */
     anyDependenciesUpdated: boolean;
@@ -198,9 +203,14 @@ export abstract class Publisher {
     readonly #atOrganizationRegistry: string;
 
     /**
+     * Publish state for all repositories up to the current repository.
+     */
+    #repositoryPublishStates: Record<string, RepositoryPublishState> = {};
+
+    /**
      * Publish state for current repository.
      */
-    #repositoryPublishState: RepositoryPublishState | undefined;
+    #repositoryPublishState: RepositoryPublishState | undefined = undefined;
 
     /**
      * Constructor.
@@ -237,8 +247,6 @@ export abstract class Publisher {
         this.#atOrganization = `@${this.configuration.organization}`;
 
         this.#atOrganizationRegistry = `${this.atOrganization}:registry${phase === "alpha" ? `=${this.configuration.alphaRegistry}` : ""}`;
-
-        this.#repositoryPublishState = undefined;
     }
 
     /**
@@ -987,10 +995,13 @@ export abstract class Publisher {
             patchVersion,
             preReleaseIdentifier: preReleaseIdentifier ?? null,
             savePackageConfigurationPending: false,
+            dependencyPackageNames: [],
             anyDependenciesUpdated: false
         };
 
         const repositoryPublishState = this.#repositoryPublishState;
+
+        this.#repositoryPublishStates[repositoryName] = repositoryPublishState;
 
         if (!this.isValidBranch()) {
             throw new Error(`Branch ${branch} is not valid for ${this.phase} phase`);
@@ -1028,7 +1039,7 @@ export abstract class Publisher {
         // eslint-disable-next-line no-param-reassign -- Repository is necessarily updated as part of building publish state.
         repository.workingVersion = `${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}`;
 
-        const updateDependencyPackageNames: string[] = [];
+        const updateDependencyPackageNamesSet = new Set<string>();
 
         for (const dependencies of [packageConfiguration.devDependencies ?? {}, packageConfiguration.dependencies ?? {}]) {
             for (const dependencyPackageName of Object.keys(dependencies)) {
@@ -1037,6 +1048,8 @@ export abstract class Publisher {
                 // Dependency repository name is null if dependency is not within the organization.
                 if (dependencyRepositoryName !== null) {
                     this.logger.trace(`Organization dependency ${dependencyPackageName} from package configuration`);
+
+                    repositoryPublishState.dependencyPackageNames.push(dependencyPackageName);
 
                     if (this.#isOrganizationDependencyUpdated(phaseDateTime, dependencyRepositoryName, false)) {
                         const dependencyWorkingVersion = this.configuration.repositories[dependencyRepositoryName].workingVersion;
@@ -1055,7 +1068,11 @@ export abstract class Publisher {
                             // Dependency will be updated alongside all other dependencies.
                             dependencies[dependencyPackageName] = dependencyRepositoryVersion;
                         } else {
-                            updateDependencyPackageNames.push(dependencyPackageName);
+                            updateDependencyPackageNamesSet.add(dependencyPackageName);
+
+                            for (const dependencyDependencyPackageName of this.#repositoryPublishStates[dependencyRepositoryName].dependencyPackageNames) {
+                                updateDependencyPackageNamesSet.add(dependencyDependencyPackageName);
+                            }
                         }
 
                         repositoryPublishState.anyDependenciesUpdated = true;
@@ -1064,9 +1081,9 @@ export abstract class Publisher {
             }
         }
 
-        if (updateDependencyPackageNames.length !== 0) {
+        if (updateDependencyPackageNamesSet.size !== 0) {
             // Run "npm update" to force update of repository packages whose configured version didn't change.
-            this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "update", ...updateDependencyPackageNames);
+            this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "update", ...updateDependencyPackageNamesSet);
         }
 
         // Saving the package configuration would affect check for any changes so defer it.
@@ -1132,6 +1149,8 @@ export abstract class Publisher {
 
                             delete this.publishState.repositoryName;
                             delete this.publishState.step;
+
+                            this.#repositoryPublishState = undefined;
                         } finally {
                             // Return to the start directory.
                             process.chdir(startDirectory);
