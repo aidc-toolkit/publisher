@@ -108,11 +108,6 @@ export interface RepositoryPublishState {
     savePackageConfigurationPending: boolean;
 
     /**
-     * Dependency package names, including those that are dependencies of dependencies.
-     */
-    dependencyPackageNames: string[];
-
-    /**
      * True if any dependencies, including additional, have been updated.
      */
     anyDependenciesUpdated: boolean;
@@ -201,11 +196,6 @@ export abstract class Publisher {
      * At organization registry parameter.
      */
     readonly #atOrganizationRegistry: string;
-
-    /**
-     * Publish state for all repositories up to the current repository.
-     */
-    #repositoryPublishStates: Record<string, RepositoryPublishState> = {};
 
     /**
      * Publish state for current repository.
@@ -995,13 +985,10 @@ export abstract class Publisher {
             patchVersion,
             preReleaseIdentifier: preReleaseIdentifier ?? null,
             savePackageConfigurationPending: false,
-            dependencyPackageNames: [],
             anyDependenciesUpdated: false
         };
 
         const repositoryPublishState = this.#repositoryPublishState;
-
-        this.#repositoryPublishStates[repositoryName] = repositoryPublishState;
 
         if (!this.isValidBranch()) {
             throw new Error(`Branch ${branch} is not valid for ${this.phase} phase`);
@@ -1039,6 +1026,8 @@ export abstract class Publisher {
         // eslint-disable-next-line no-param-reassign -- Repository is necessarily updated as part of building publish state.
         repository.workingVersion = `${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}`;
 
+        const dependencyPackageNames = [];
+
         const updateDependencyPackageNamesSet = new Set<string>();
 
         for (const dependencies of [packageConfiguration.devDependencies ?? {}, packageConfiguration.dependencies ?? {}]) {
@@ -1049,10 +1038,12 @@ export abstract class Publisher {
                 if (dependencyRepositoryName !== null) {
                     this.logger.trace(`Organization dependency ${dependencyPackageName} from package configuration`);
 
-                    repositoryPublishState.dependencyPackageNames.push(dependencyPackageName);
+                    const dependencyRepository = this.configuration.repositories[dependencyRepositoryName];
+
+                    dependencyPackageNames.push(dependencyPackageName);
 
                     if (this.#isOrganizationDependencyUpdated(phaseDateTime, dependencyRepositoryName, false)) {
-                        const dependencyWorkingVersion = this.configuration.repositories[dependencyRepositoryName].workingVersion;
+                        const dependencyWorkingVersion = dependencyRepository.workingVersion;
 
                         // Patch version isn't part of working version and is irrelevant to the test.
                         const dependencyParsedVersion = parseVersion(`${dependencyWorkingVersion}.0`);
@@ -1070,8 +1061,10 @@ export abstract class Publisher {
                         } else {
                             updateDependencyPackageNamesSet.add(dependencyPackageName);
 
-                            for (const dependencyDependencyPackageName of this.#repositoryPublishStates[dependencyRepositoryName].dependencyPackageNames) {
-                                updateDependencyPackageNamesSet.add(dependencyDependencyPackageName);
+                            if (dependencyRepository.dependencyPackageNames !== undefined) {
+                                for (const dependencyDependencyPackageName of dependencyRepository.dependencyPackageNames) {
+                                    updateDependencyPackageNamesSet.add(dependencyDependencyPackageName);
+                                }
                             }
                         }
 
@@ -1079,6 +1072,14 @@ export abstract class Publisher {
                     }
                 }
             }
+        }
+
+        if (dependencyPackageNames.length !== 0) {
+            // eslint-disable-next-line no-param-reassign -- Dependency package names are determined in this method.
+            repository.dependencyPackageNames = dependencyPackageNames;
+        } else {
+            // eslint-disable-next-line no-param-reassign -- Dependency package names are determined in this method.
+            delete repository.dependencyPackageNames;
         }
 
         if (updateDependencyPackageNamesSet.size !== 0) {

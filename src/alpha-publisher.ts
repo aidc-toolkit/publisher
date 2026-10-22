@@ -245,35 +245,33 @@ class AlphaPublisher extends Publisher {
                 }
             }
 
-            for (const currentDependencies of [packageConfiguration.devDependencies, packageConfiguration.dependencies]) {
-                if (currentDependencies !== undefined) {
-                    for (const [dependencyPackageName, version] of Object.entries(currentDependencies)) {
-                        // Ignore organization dependencies and any version that goes beyond basic compatible and approximate versions.
-                        if (this.dependencyRepositoryName(dependencyPackageName) === null && (version.startsWith("^") || version.startsWith("~"))) {
-                            const update = updatesMap.get(dependencyPackageName);
+            for (const dependencies of [packageConfiguration.devDependencies ?? {}, packageConfiguration.dependencies ?? {}]) {
+                for (const [dependencyPackageName, version] of Object.entries(dependencies)) {
+                    // Ignore organization dependencies and any version that goes beyond basic compatible and approximate versions.
+                    if (this.dependencyRepositoryName(dependencyPackageName) === null && (version.startsWith("^") || version.startsWith("~"))) {
+                        const update = updatesMap.get(dependencyPackageName);
 
-                            if (update !== undefined) {
-                                const compatibleUpdatePending = update.semverVersion !== undefined;
-                                const incompatibleUpdatePending = update.latestVersion !== undefined && update.latestVersion !== update.semverVersion;
-                                const manualUpdatePending = incompatibleUpdatePending && version.includes(" ");
+                        if (update !== undefined) {
+                            const compatibleUpdatePending = update.semverVersion !== undefined;
+                            const incompatibleUpdatePending = update.latestVersion !== undefined && update.latestVersion !== update.semverVersion;
+                            const manualUpdatePending = incompatibleUpdatePending && version.includes(" ");
 
-                                if (compatibleUpdatePending) {
-                                    this.logger.info(`Dependency ${dependencyPackageName} ${!this.#updateAll ? "pending update" : "updating"} from version ${version} to version ${update.semverVersion}.`);
-                                }
+                            if (compatibleUpdatePending) {
+                                this.logger.info(`Dependency ${dependencyPackageName} ${!this.#updateAll ? "pending update" : "updating"} from version ${version} to version ${update.semverVersion}.`);
+                            }
 
-                                if (incompatibleUpdatePending) {
-                                    this.logger.warn(`Dependency ${dependencyPackageName} has ${!manualUpdatePending ? "incompatible" : "manual"} update pending from version ${version} to ${update.latestVersion}.`);
-                                }
+                            if (incompatibleUpdatePending) {
+                                this.logger.warn(`Dependency ${dependencyPackageName} has ${!manualUpdatePending ? "incompatible" : "manual"} update pending from version ${version} to ${update.latestVersion}.`);
+                            }
 
-                                if (this.#updateAll && !manualUpdatePending) {
-                                    // eslint-disable-next-line no-await-in-loop -- Can't proceed without getting an answer.
-                                    const updateVersion = incompatibleUpdatePending && !this.dryRun && await this.ask(`Update ${dependencyPackageName} to 1) ${compatibleUpdatePending ? update.semverVersion : version} (${compatibleUpdatePending ? "" : "no change, "}default) or 2) ${update.latestVersion}? [1/2] `, ["1", "2"]) === "1" ? update.semverVersion : update.latestVersion;
+                            if (this.#updateAll && !manualUpdatePending) {
+                                // eslint-disable-next-line no-await-in-loop -- Can't proceed without getting an answer.
+                                const updateVersion = incompatibleUpdatePending && !this.dryRun && await this.ask(`Update ${dependencyPackageName} to 1) ${compatibleUpdatePending ? update.semverVersion : version} (${compatibleUpdatePending ? "" : "no change, "}default) or 2) ${update.latestVersion}? [1/2] `, ["1", "2"]) === "1" ? update.semverVersion : update.latestVersion;
 
-                                    if (updateVersion !== undefined) {
-                                        currentDependencies[dependencyPackageName] = updateVersion;
+                                if (updateVersion !== undefined) {
+                                    dependencies[dependencyPackageName] = updateVersion;
 
-                                        repositoryPublishState.savePackageConfigurationPending = true;
-                                    }
+                                    repositoryPublishState.savePackageConfigurationPending = true;
                                 }
                             }
                         }
