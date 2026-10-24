@@ -13,6 +13,9 @@ import { Publisher, RunOptions } from "./publisher.js";
  * Configuration layout of publisher.secure.json.
  */
 interface SecureConfiguration {
+    /**
+     * Token.
+     */
     token: string;
 }
 

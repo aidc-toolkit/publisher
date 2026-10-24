@@ -219,17 +219,24 @@ class AlphaPublisher extends Publisher {
 
         // Check for external updates, even if there are no changes, if not in fast mode and working on the latest version.
         if (!this.#fast && repositoryPublishState.repository.workingVersion === this.latestVersion) {
-            const semverUpdatesMap = this.checkUpdates("semver");
+            const latestSemanticUpdatesMap = this.checkUpdates("semver");
             const latestUpdatesMap = this.checkUpdates("latest");
 
             const updatesMap = new Map<string, {
-                semverVersion?: string;
+                /**
+                 * Latest semantic version available.
+                 */
+                latestSemanticVersion?: string;
+
+                /**
+                 * Latest version available.
+                 */
                 latestVersion?: string;
             }>();
 
-            for (const [packageName, semverVersion] of semverUpdatesMap) {
+            for (const [packageName, latestSemanticVersion] of latestSemanticUpdatesMap) {
                 updatesMap.set(packageName, {
-                    semverVersion
+                    latestSemanticVersion
                 });
             }
 
@@ -252,12 +259,12 @@ class AlphaPublisher extends Publisher {
                         const update = updatesMap.get(dependencyPackageName);
 
                         if (update !== undefined) {
-                            const compatibleUpdatePending = update.semverVersion !== undefined;
-                            const incompatibleUpdatePending = update.latestVersion !== undefined && update.latestVersion !== update.semverVersion;
+                            const compatibleUpdatePending = update.latestSemanticVersion !== undefined;
+                            const incompatibleUpdatePending = update.latestVersion !== undefined && update.latestVersion !== update.latestSemanticVersion;
                             const manualUpdatePending = incompatibleUpdatePending && version.includes(" ");
 
                             if (compatibleUpdatePending) {
-                                this.logger.info(`Dependency ${dependencyPackageName} ${!this.#updateAll ? "pending update" : "updating"} from version ${version} to version ${update.semverVersion}.`);
+                                this.logger.info(`Dependency ${dependencyPackageName} ${!this.#updateAll ? "pending update" : "updating"} from version ${version} to version ${update.latestSemanticVersion}.`);
                             }
 
                             if (incompatibleUpdatePending) {
@@ -266,7 +273,7 @@ class AlphaPublisher extends Publisher {
 
                             if (this.#updateAll && !manualUpdatePending) {
                                 // eslint-disable-next-line no-await-in-loop -- Can't proceed without getting an answer.
-                                const updateVersion = incompatibleUpdatePending && !this.dryRun && await this.ask(`Update ${dependencyPackageName} to 1) ${compatibleUpdatePending ? update.semverVersion : version} (${compatibleUpdatePending ? "" : "no change, "}default) or 2) ${update.latestVersion}? [1/2] `, ["1", "2"]) === "1" ? update.semverVersion : update.latestVersion;
+                                const updateVersion = incompatibleUpdatePending && !this.dryRun && await this.ask(`Update ${dependencyPackageName} to 1) ${compatibleUpdatePending ? update.latestSemanticVersion : version} (${compatibleUpdatePending ? "" : "no change, "}default) or 2) ${update.latestVersion}? [1/2] `, ["1", "2"]) === "1" ? update.latestSemanticVersion : update.latestVersion;
 
                                 if (updateVersion !== undefined) {
                                     dependencies[dependencyPackageName] = updateVersion;
