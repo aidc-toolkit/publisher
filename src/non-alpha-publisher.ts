@@ -266,13 +266,13 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
         const nextPhase = NEXT_PHASE[phase];
         const preReleasePhase = preReleaseIdentifier ?? "prod";
 
+        if (this.anyChanges(repository.phaseStates[previousPhase]?.dateTime)) {
+            throw new Error(`Repository has changed since last ${previousPhase} published`);
+        }
+
         let skip = false;
 
         if (preReleasePhase === previousPhase) {
-            if (this.anyChanges(repository.phaseStates[previousPhase]?.dateTime)) {
-                throw new Error(`Repository has changed since last ${previousPhase} published`);
-            }
-
             // Production version has no pre-release identifier.
             const version = this.updatePackageVersion(undefined, undefined, undefined, phase !== "prod" ? phase : null);
 
