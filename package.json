@@ -20,6 +20,7 @@
     "url": "https://www.linkedin.com/in/kdean"
   },
   "scripts": {
+    "clean-install": "npm clean-install && tsx src/clean-install.ts",
     "lint": "eslint",
     "build:alpha": "tsc --noEmit && tsc --project tsconfig-config.json --noEmit",
     "publish-alpha": "tsx src/alpha-publisher.ts $*",
