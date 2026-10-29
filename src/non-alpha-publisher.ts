@@ -168,7 +168,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
     }
 
     /**
-     * Run a job. Waits up to 20 seconds for job to start and then runs until complete.
+     * Run a job. Waits up to five minutes for job to start and then runs until complete.
      *
      * @param jobRunner
      * Job runner.
@@ -185,8 +185,8 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
             // eslint-disable-next-line no-await-in-loop,@typescript-eslint/no-implied-eval -- Loop depends on awaited response.
             switch (await setTimeout(2000).then(jobRunner)) {
                 case "waiting":
-                    // Abort if job still waiting after two minutes.
-                    if (++waitCount === 60) {
+                    // Abort if job still waiting after five minutes.
+                    if (++waitCount === 150) {
                         throw new Error(timeoutMessage);
                     }
                     break;
