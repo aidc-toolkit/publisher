@@ -619,8 +619,6 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
      * @param phaseDateTime
      * Phase date/time to check against or undefined if phase never before published.
      *
-     * If true, ignore .github directory.
-     *
      * @returns
      * True if there have been any changes since the phase date/time.
      */
