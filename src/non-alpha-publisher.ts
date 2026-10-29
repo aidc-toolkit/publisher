@@ -136,8 +136,8 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
      * @inheritDoc
      */
     protected override isValidBranch(repository: Repository, branch: string, majorVersion: number, minorVersion: number): boolean {
-        // Branch for non-alpha phase must match version for anything other than helper repository.
-        return repository.dependencyType === "helper" || branch === `v${majorVersion}.${minorVersion}`;
+        // Branch for non-alpha phase must match version.
+        return branch === `v${majorVersion}.${minorVersion}`;
     }
 
     /**
@@ -276,12 +276,9 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
             // Production version has no pre-release identifier.
             const version = this.updatePackageVersion(undefined, undefined, undefined, phase !== "prod" ? phase : null);
 
-            if (repository.dependencyType === "external" || repository.dependencyType === "internal") {
-                // Save version to be picked up by dependents.
-                this.updatePhaseState({
-                    version
-                });
-            }
+            this.updatePhaseState({
+                version
+            });
 
             // Alpha phase uses local registry.
             if (previousPhase === "alpha") {
@@ -354,15 +351,12 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
                 this.commitUpdatedPackageVersion();
             });
 
-            // Helper repositories don't use tags.
-            if (repository.dependencyType !== "helper") {
-                await this.#runStep("tag", () => {
-                    this.run(RunOptions.SkipOnDryRun, false, false, "git", "tag", tag);
-                });
-            }
+            await this.#runStep("tag", () => {
+                this.run(RunOptions.SkipOnDryRun, false, false, "git", "tag", tag);
+            });
 
             await this.#runStep("push", () => {
-                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "push", "--atomic", "origin", branch, ...repository.dependencyType !== "helper" ? [tag] : []);
+                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "push", "--atomic", "origin", branch, tag);
             });
 
             if (hasPushWorkflow) {
@@ -394,8 +388,8 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
                 }
             }
 
-            // Helper repositories don't have version flow.
-            if (repository.dependencyType !== "helper" && phase === "prod") {
+            // Pull requests apply only to production publication.
+            if (phase === "prod") {
                 await this.#runStep("pull request", async () =>
                     this.#octokit.rest.pulls.create({
                         owner: this.configuration.organization,
@@ -437,7 +431,20 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
 
         this.commitModified(`Published ${this.phase} release.`, SHARED_CONFIGURATION_PATH);
 
-        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "push", "--atomic", "origin", this.repositoryPublishState.branch);
+        const repositoryPublishState = this.repositoryPublishState;
+
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Phase state exists.
+        const version = repositoryPublishState.repository.phaseStates[this.phase]!.version;
+
+        const tag = `v${version}`;
+
+        // Move local tag to latest commit.
+        this.run(RunOptions.SkipOnDryRun, false, false, "git", "tag", "--delete", tag);
+        this.run(RunOptions.SkipOnDryRun, false, false, "git", "tag", tag);
+
+        // Delete remote tag and push latest commit and updated tag to remote.
+        this.run(RunOptions.SkipOnDryRun, false, false, "git", "push", "--atomic", "--delete", "origin", tag);
+        this.run(RunOptions.SkipOnDryRun, false, false, "git", "push", "--atomic", "origin", repositoryPublishState.branch, tag);
     }
 }
 

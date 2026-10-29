@@ -64,9 +64,11 @@
       ],
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-10-17T00:46:05.000Z"
+          "dateTime": "2026-10-17T00:46:05.000Z",
+          "version": "1.0.51-beta"
         },
         "prod": {
+          "version": "1.0.51",
           "dateTime": "2026-10-17T16:04:30.000Z"
         }
       }
@@ -75,9 +77,11 @@
       "dependencyType": "application",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-10-17T00:46:09.000Z"
+          "dateTime": "2026-10-17T00:46:09.000Z",
+          "version": "1.0.54-beta"
         },
         "prod": {
+          "version": "1.0.54",
           "dateTime": "2026-10-17T16:04:37.000Z"
         }
       }
@@ -99,9 +103,11 @@
       "dependencyType": "application",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-10-17T14:31:14.000Z"
+          "dateTime": "2026-10-17T14:31:14.000Z",
+          "version": "1.0.59-beta"
         },
         "prod": {
+          "version": "1.0.59",
           "dateTime": "2026-10-17T16:06:28.000Z"
         }
       }
@@ -110,9 +116,11 @@
       "dependencyType": "application",
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-10-17T14:31:25.000Z"
+          "dateTime": "2026-10-17T14:31:25.000Z",
+          "version": "1.0.60-beta"
         },
         "prod": {
+          "version": "1.0.60",
           "dateTime": "2026-10-17T16:06:43.000Z"
         }
       }
@@ -126,9 +134,11 @@
       ],
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-10-17T14:34:43.000Z"
+          "dateTime": "2026-10-17T14:34:43.000Z",
+          "version": "1.0.61-beta"
         },
         "prod": {
+          "version": "1.0.61",
           "dateTime": "2026-10-17T16:09:54.000Z"
         }
       }
@@ -141,9 +151,11 @@
       ],
       "phaseStates": {
         "beta": {
-          "dateTime": "2026-10-17T01:03:47.000Z"
+          "dateTime": "2026-10-17T01:03:47.000Z",
+          "version": "1.0.51-beta"
         },
         "prod": {
+          "version": "1.0.51",
           "dateTime": "2026-10-17T16:09:58.000Z"
         }
       }

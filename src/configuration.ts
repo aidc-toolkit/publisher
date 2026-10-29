@@ -35,14 +35,14 @@ export const PREVIOUS_PHASE: Readonly<Record<Phase, Phase | null>> = {
  */
 export interface PhaseState {
     /**
+     * Version the phase was last published.
+     */
+    version: string;
+
+    /**
      * Date/time the phase was last published.
      */
     dateTime?: Date;
-
-    /**
-     * Version; used by dependents.
-     */
-    version?: string | undefined;
 }
 
 /**

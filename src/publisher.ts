@@ -988,13 +988,19 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
 
             // Create phase state if necessary.
             if (phaseState === undefined) {
-                phaseState = {};
+                phaseState = {
+                    // Empty version will be replaced almost immediately.
+                    version: ""
+                };
 
                 // eslint-disable-next-line no-param-reassign -- Repository is necessarily updated as part of building publish state.
                 repository.phaseStates[this.phase] = phaseState;
             }
         } else {
-            phaseState = {};
+            phaseState = {
+                // Empty version will not be referenced.
+                version: ""
+            };
         }
 
         const phaseDateTime = this.#getPhaseDateTime(false, "Repository", repositoryName, repository);
