@@ -64,7 +64,7 @@ type JobState = "waiting" | "running" | "complete";
 /**
  * Non-alpha release publisher.
  */
-export class NonAlphaPublisher extends Publisher {
+class NonAlphaPublisher extends Publisher {
     /**
      * Secure configuration.
      */
