@@ -6,7 +6,7 @@ import { Publisher, RunOptions } from "./publisher.js";
 /**
  * Alpha release publisher.
  */
-class AlphaPublisher extends Publisher {
+class AlphaPublisher extends Publisher<"alpha"> {
     /**
      * If true, publish fast, skipping unnecessary checks.
      */

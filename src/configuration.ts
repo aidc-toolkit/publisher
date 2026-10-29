@@ -152,7 +152,7 @@ export interface Repository extends SharedRepository, LocalRepository {
     /**
      * Phase states.
      */
-    readonly phaseStates: Partial<Record<Phase, PhaseState>>;
+    readonly phaseStates: Partial<Record<Exclude<Phase, "clean-install">, PhaseState>>;
 }
 
 /**
@@ -189,11 +189,11 @@ interface JSONSharedConfiguration extends Omit<Readonly<SharedConfiguration>, "r
 /**
  * Publish state.
  */
-export interface PublishState {
+export interface PublishState<TPhase extends Phase | undefined = Phase> {
     /**
-     * Current phase in publication.
+     * Current phase in publication or undefined if not publishing.
      */
-    phase: Phase;
+    phase: TPhase;
 
     /**
      * Current repository name in publication.

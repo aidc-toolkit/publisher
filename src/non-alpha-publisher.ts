@@ -64,7 +64,7 @@ type JobState = "waiting" | "running" | "complete";
 /**
  * Non-alpha release publisher.
  */
-class NonAlphaPublisher extends Publisher {
+class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
     /**
      * Secure configuration.
      */
@@ -261,7 +261,7 @@ class NonAlphaPublisher extends Publisher {
         const preReleaseIdentifier = repositoryPublishState.preReleaseIdentifier;
 
         const phase = this.phase;
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Only alpha has a null previous phase.
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Non-alpha phases have non-null previous phase.
         const previousPhase = PREVIOUS_PHASE[phase]!;
         const nextPhase = NEXT_PHASE[phase];
         const preReleasePhase = preReleaseIdentifier ?? "prod";

@@ -1,31 +1,60 @@
-import { getLogger } from "@aidc-toolkit/core";
-import { spawnSync } from "node:child_process";
 import * as process from "node:process";
-import { loadConfiguration } from "./configuration.js";
+import { Publisher, RunOptions } from "./publisher.js";
 
-const configuration = loadConfiguration();
+/**
+ * Clean install.
+ */
+class CleanInstall extends Publisher<undefined> {
+    /**
+     * Constructor.
+     *
+     * @param dryRun
+     * If true, output what would be run rather than running it.
+     */
+    constructor(dryRun: boolean) {
+        super(undefined, dryRun);
+    }
 
-const logger = getLogger(configuration.logLevel);
+    /**
+     * @inheritDoc
+     */
+    protected override dependencyVersionFor(): string {
+        return "";
+    }
 
-for (const [repositoryName, repository] of Object.entries(configuration.repositories)) {
-    logger.info(`Repository ${repositoryName}...`);
+    /**
+     * @inheritDoc
+     */
+    protected override isValidRepositoryChange(): boolean {
+        return false;
+    }
 
-    // All repository directories are expected to be children of the parent of this repository.
-    process.chdir(`../${repository.directory ?? repositoryName}`);
+    /**
+     * @inheritDoc
+     */
+    protected override isValidBranch(): boolean {
+        return true;
+    }
 
-    if (repositoryName !== "publisher") {
-        const spawnResult = spawnSync("npm", ["clean-install"]);
+    /**
+     * @inheritDoc
+     */
+    protected override publish(): void {
+        const repositoryPublishState = this.repositoryPublishState;
 
-        if (spawnResult.error !== undefined) {
-            throw spawnResult.error;
-        }
+        // Configure project registry based on pre-release identifier.
+        this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", repositoryPublishState.preReleaseIdentifier === "alpha" ? "set" : "delete", this.atOrganizationRegistry, "--location", "project");
 
-        if (spawnResult.status === null) {
-            throw new Error(`Terminated by signal ${spawnResult.signal}`);
-        }
-
-        if (spawnResult.status !== 0) {
-            throw new Error(`Failed with status ${spawnResult.status}`);
+        if (repositoryPublishState.repositoryName !== "publisher") {
+            this.run(RunOptions.SkipOnDryRun, false, false, "npm", "clean-install");
         }
     }
 }
+
+// Detailed syntax checking not required as this is an internal tool.
+const publisher = new CleanInstall(process.argv.includes("--dry-run"));
+
+publisher.publishAll().catch((e: unknown) => {
+    publisher.logger.error(e);
+    process.exit(1);
+});
