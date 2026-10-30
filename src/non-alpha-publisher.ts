@@ -139,10 +139,10 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
      * @inheritDoc
      */
     protected override isValidBranch(): boolean {
-        const repositoryPublishState = this.repositoryPublishState;
+        const parsedVersion = this.repositoryPublishState.parsedVersion;
 
         // Branch for non-alpha phase must match version.
-        return repositoryPublishState.branch === `v${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}`;
+        return this.repositoryPublishState.branch === `v${parsedVersion.majorVersion}.${parsedVersion.minorVersion}`;
     }
 
     /**
@@ -264,13 +264,13 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
         const repositoryPublishState = this.repositoryPublishState;
         const repository = repositoryPublishState.repository;
         const branch = repositoryPublishState.branch;
-        const preReleaseIdentifier = repositoryPublishState.preReleaseIdentifier;
+        const parsedVersion = repositoryPublishState.parsedVersion;
 
         const phase = this.phase;
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Non-alpha phases have non-null previous phase.
         const previousPhase = PREVIOUS_PHASE[phase]!;
         const nextPhase = NEXT_PHASE[phase];
-        const preReleasePhase = preReleaseIdentifier ?? "prod";
+        const preReleasePhase = parsedVersion.preReleaseIdentifier ?? "prod";
 
         let skip = false;
 
@@ -280,7 +280,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
             }
 
             // Production version has no pre-release identifier.
-            const version = this.updatePackageVersion(undefined, undefined, undefined, phase !== "prod" ? phase : null);
+            const version = this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, phase !== "prod" ? phase : undefined);
 
             this.updatePhaseState({
                 version

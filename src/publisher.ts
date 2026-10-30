@@ -2,6 +2,7 @@ import {
     getLogger,
     i18nCoreInit,
     I18nLanguageDetectors,
+    type ParsedVersion,
     parseVersion,
     pick,
     type Promisable
@@ -83,24 +84,9 @@ export interface RepositoryPublishState {
     readonly packageConfiguration: PackageConfiguration;
 
     /**
-     * Major version.
+     * Parsed version.
      */
-    majorVersion: number;
-
-    /**
-     * Minor version.
-     */
-    minorVersion: number;
-
-    /**
-     * Patch version.
-     */
-    patchVersion: number;
-
-    /**
-     * Pre-release identifier or null if none.
-     */
-    preReleaseIdentifier: string | null;
+    parsedVersion: ParsedVersion;
 
     /**
      * True if save package configuration is pending.
@@ -301,10 +287,10 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
 
     /**
      * Get the package name for a repository name.
-     * 
+     *
      * @param repositoryName
      * Repository name.
-     * 
+     *
      * @returns
      * Package name.
      */
@@ -851,61 +837,48 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
      * Update the package version.
      *
      * @param majorVersion
-     * Major version or undefined if no change.
+     * Major version.
      *
      * @param minorVersion
-     * Minor version or undefined if no change.
+     * Minor version.
      *
      * @param patchVersion
-     * Patch version or undefined if no change.
+     * Patch version.
      *
      * @param preReleaseIdentifier
-     * Pre-release identifier or undefined if no change.
+     * Pre-release identifier.
      *
      * @param preReleaseDateTime
-     * Pre-release date/time or undefined if no change. Applies only to alpha pre-release.
+     * Pre-release date/time. Modifies pre-release identifier if provided.
      *
      * @returns
      * Updated package version.
      */
-    protected updatePackageVersion(majorVersion: number | undefined, minorVersion: number | undefined, patchVersion: number | undefined, preReleaseIdentifier: string | null | undefined, preReleaseDateTime?: string): string {
+    protected updatePackageVersion(majorVersion: number, minorVersion: number, patchVersion: number, preReleaseIdentifier?: "pending" | "alpha" | "beta", preReleaseDateTime?: Date): string {
         const repositoryPublishState = this.repositoryPublishState;
 
-        if (majorVersion !== undefined) {
-            repositoryPublishState.majorVersion = majorVersion;
-        }
+        const baseVersion = `${majorVersion}.${minorVersion}.${patchVersion}${preReleaseIdentifier !== undefined ? `-${preReleaseIdentifier}` : ""}`;
 
-        if (minorVersion !== undefined) {
-            repositoryPublishState.minorVersion = minorVersion;
-        }
+        const previousParsedVersion = repositoryPublishState.parsedVersion;
 
-        if (patchVersion !== undefined) {
-            repositoryPublishState.patchVersion = patchVersion;
-        }
-
-        if (preReleaseIdentifier !== undefined) {
-            repositoryPublishState.preReleaseIdentifier = preReleaseIdentifier;
-        }
-
-        const baseVersion = `${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}.${repositoryPublishState.patchVersion}${
-            repositoryPublishState.preReleaseIdentifier !== null ?
-                `-${repositoryPublishState.preReleaseIdentifier}` :
-                ""
-        }`;
-
-        if (baseVersion !== repositoryPublishState.packageConfiguration.version) {
+        // Regenerate source version file if base version has changed.
+        if (previousParsedVersion.majorVersion !== majorVersion || previousParsedVersion.minorVersion !== minorVersion || previousParsedVersion.patchVersion !== patchVersion || previousParsedVersion.preReleaseIdentifier !== preReleaseIdentifier) {
             this.#updateSourceVersion(baseVersion);
         }
 
-        const version = `${baseVersion}${
-            repositoryPublishState.preReleaseIdentifier === "alpha" && preReleaseDateTime !== undefined ?
-                `.${preReleaseDateTime}` :
-                ""
-        }`;
+        const version = preReleaseDateTime === undefined ? baseVersion : `${baseVersion}.${preReleaseDateTime.toISOString().replaceAll(/\D/ug, "").substring(0, 12)}`;
 
         repositoryPublishState.packageConfiguration.version = version;
 
         this.savePackageConfiguration();
+
+        repositoryPublishState.parsedVersion = {
+            majorVersion,
+            minorVersion,
+            patchVersion,
+            preReleaseIdentifier,
+            preReleaseDateTime
+        };
 
         return version;
     }
@@ -1002,12 +975,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Package configuration format is known.
         const packageConfiguration = JSON.parse(fs.readFileSync(Publisher.#PACKAGE_CONFIGURATION_PATH).toString()) as PackageConfiguration;
 
-        const {
-            majorVersion,
-            minorVersion,
-            patchVersion,
-            preReleaseIdentifier
-        } = parseVersion(packageConfiguration.version);
+        let parsedVersion = parseVersion(packageConfiguration.version);
 
         this.#repositoryPublishState = {
             repositoryName,
@@ -1016,10 +984,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
             phaseDateTime,
             branch,
             packageConfiguration,
-            majorVersion,
-            minorVersion,
-            patchVersion,
-            preReleaseIdentifier: preReleaseIdentifier ?? null,
+            parsedVersion,
             savePackageConfigurationPending: false,
             anyDependenciesUpdated: false
         };
@@ -1037,27 +1002,27 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
             const branchMajorVersion = Number(parsedBranchGroups["branchMajorVersion"]);
             const branchMinorVersion = Number(parsedBranchGroups["branchMinorVersion"]);
 
-            // If in a version branch and version doesn't match, update it.
-            if (majorVersion !== branchMajorVersion || minorVersion !== branchMinorVersion) {
+            // If version doesn't match, branch is new.
+            if (parsedVersion.majorVersion !== branchMajorVersion || parsedVersion.minorVersion !== branchMinorVersion) {
                 if (this.phase !== "alpha") {
                     throw new Error("Version transition not permitted except in alpha phase");
                 }
 
-                if (majorVersion !== branchMajorVersion ? majorVersion !== branchMajorVersion - 1 || branchMinorVersion !== 0 : minorVersion !== branchMinorVersion - 1) {
-                    throw new Error(`Invalid transition from ${majorVersion}.${minorVersion} to ${branchMajorVersion}.${branchMinorVersion}`);
+                if (parsedVersion.majorVersion !== branchMajorVersion ? parsedVersion.majorVersion !== branchMajorVersion - 1 || branchMinorVersion !== 0 : parsedVersion.minorVersion !== branchMinorVersion - 1) {
+                    throw new Error(`Invalid transition from ${parsedVersion.majorVersion}.${parsedVersion.minorVersion} to ${branchMajorVersion}.${branchMinorVersion}`);
                 }
 
-                this.updatePackageVersion(branchMajorVersion, branchMinorVersion, 0, null);
-                this.commitUpdatedPackageVersion(Publisher.#PACKAGE_CONFIGURATION_PATH);
+                // Update package version with pre-release identifier "pending"; alpha publisher will commit it.
+                this.updatePackageVersion(branchMajorVersion, branchMinorVersion, 0, "pending");
 
-                // Patch version is set to -1 to allow switch to alpha to start at 0.
-                repositoryPublishState.patchVersion = -1;
+                // Parsed version is updated in previous call.
+                parsedVersion = repositoryPublishState.parsedVersion;
             }
         }
 
         // Version in repository publish state will be updated if in a new branch.
         // eslint-disable-next-line no-param-reassign -- Repository is necessarily updated as part of building publish state.
-        repository.workingVersion = `${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}`;
+        repository.workingVersion = `${parsedVersion.majorVersion}.${parsedVersion.minorVersion}`;
 
         if (this.phase !== undefined) {
             const dependencyPackageNames = [];
@@ -1083,7 +1048,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
                             const dependencyParsedVersion = parseVersion(`${dependencyWorkingVersion}.0`);
 
                             // Verify that current repository has a version not less than that of any dependency.
-                            if (repositoryPublishState.majorVersion < dependencyParsedVersion.majorVersion || (repositoryPublishState.majorVersion === dependencyParsedVersion.majorVersion && (repositoryPublishState.minorVersion < dependencyParsedVersion.minorVersion || (repositoryPublishState.minorVersion === dependencyParsedVersion.minorVersion && (repositoryPublishState.patchVersion !== -1 ? repositoryPublishState.patchVersion : 0) < dependencyParsedVersion.patchVersion)))) {
+                            if (parsedVersion.majorVersion < dependencyParsedVersion.majorVersion || (parsedVersion.majorVersion === dependencyParsedVersion.majorVersion && (parsedVersion.minorVersion < dependencyParsedVersion.minorVersion || (parsedVersion.minorVersion === dependencyParsedVersion.minorVersion && (parsedVersion.patchVersion !== -1 ? parsedVersion.patchVersion : 0) < dependencyParsedVersion.patchVersion)))) {
                                 throw new Error(`Repository version ${packageConfiguration.version} is less than ${dependencyRepositoryName} dependency version ${dependencyWorkingVersion}`);
                             }
 

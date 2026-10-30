@@ -292,12 +292,18 @@ class AlphaPublisher extends Publisher<"alpha"> {
 
         // Nothing to do if there are no changes and dependencies haven't been updated.
         if (this.anyChanges(repositoryPublishState.phaseDateTime) || repositoryPublishState.anyDependenciesUpdated) {
-            const switchToAlpha = repositoryPublishState.preReleaseIdentifier !== "alpha";
+            let parsedVersion = repositoryPublishState.parsedVersion;
+
+            const switchToAlpha = parsedVersion.preReleaseIdentifier !== "alpha";
 
             if (switchToAlpha) {
                 this.setOrganizationAlphaRegistry();
 
-                const version = this.updatePackageVersion(undefined, undefined, repositoryPublishState.patchVersion + 1, "alpha");
+                // Pre-release identifier "pending" indicates that patch version should remain unchanged.
+                const version = this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.preReleaseIdentifier === "pending" ? parsedVersion.patchVersion : parsedVersion.patchVersion + 1, "alpha");
+
+                // Parsed version is updated in previous call.
+                parsedVersion = repositoryPublishState.parsedVersion;
 
                 this.updatePhaseState({
                     version
@@ -372,7 +378,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
             // Nothing further required if this repository is not a dependency of others.
             if (repository.dependencyType === "external" || repository.dependencyType === "internal") {
                 // Package version is transient.
-                const version = this.updatePackageVersion(undefined, undefined, undefined, `alpha.${new Date().toISOString().replaceAll(/\D/ug, "").substring(0, 12)}`);
+                const version = this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, "alpha", new Date());
 
                 this.updatePhaseState({
                     version
@@ -382,7 +388,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
                     // Publish to development NPM registry.
                     this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "publish", "--tag", `alpha-${repository.workingVersion}`);
 
-                    const priorVersionRegExp = new RegExp(`^${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}.\\d+-alpha.\\d+$`, "u");
+                    const priorVersionRegExp = new RegExp(`^${parsedVersion.majorVersion}.${parsedVersion.minorVersion}.\\d+-alpha.\\d+$`, "u");
 
                     // Unpublish all prior alpha versions with the same working version.
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Output is a JSON array.
@@ -393,7 +399,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
                     }
                 } finally {
                     // Restore package version without date/time stamp but don't propagate to configuration.
-                    this.updatePackageVersion(undefined, undefined, undefined, "alpha");
+                    this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, "alpha");
                 }
             }
 
