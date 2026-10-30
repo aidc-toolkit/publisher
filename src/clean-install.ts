@@ -59,6 +59,6 @@ class CleanInstall extends Publisher<undefined> {
 const publisher = new CleanInstall(process.argv.includes("--dry-run"));
 
 publisher.publishAll().catch((e: unknown) => {
-    publisher.logger.error(e);
+    publisher.logger.error("Publisher failed", e);
     process.exit(1);
 });
