@@ -43,7 +43,7 @@ class CleanInstall extends Publisher<undefined> {
         const repositoryPublishState = this.repositoryPublishState;
 
         // Configure organization registry based on pre-release identifier.
-        if (repositoryPublishState.preReleaseIdentifier === "alpha") {
+        if (repositoryPublishState.parsedVersion.preReleaseIdentifier === "alpha") {
             this.setOrganizationAlphaRegistry();
         } else {
             this.unsetOrganizationAlphaRegistry();

@@ -7,7 +7,7 @@ import { Publisher, RunOptions } from "./publisher.js";
 /**
  * Alpha release publisher.
  */
-class AlphaPublisher extends Publisher {
+class AlphaPublisher extends Publisher<"alpha"> {
     /**
      * If true, publish fast, skipping unnecessary checks.
      */
@@ -65,21 +65,19 @@ class AlphaPublisher extends Publisher {
         const repositoryPublishState = this.repositoryPublishState;
         const repository = repositoryPublishState.repository;
 
-        // Helper repositories don't have pull request processes.
-        if (repository.dependencyType !== "helper") {
-            const phaseStates = repository.phaseStates;
+        const phaseStates = repository.phaseStates;
 
-            const alphaDateTime = phaseStates.alpha?.dateTime;
-            const prodDateTime = phaseStates.prod?.dateTime;
-            const nextBranch = this.getNextBranch();
+        const alphaDateTime = phaseStates.alpha?.dateTime;
+        const prodDateTime = phaseStates.prod?.dateTime;
+        const nextBranch = this.getNextBranch();
 
-            if (alphaDateTime !== undefined && prodDateTime !== undefined && alphaDateTime.getTime() < prodDateTime.getTime() && nextBranch !== undefined) {
-                // Fetch all changes.
-                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "fetch");
+        if (alphaDateTime !== undefined && prodDateTime !== undefined && alphaDateTime.getTime() < prodDateTime.getTime() && nextBranch !== undefined) {
+            // Fetch all changes.
+            this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "fetch");
 
-                // Merge changes that were pushed to the next branch.
-                // TODO Review this; this will bring in everything, but want only merged pull requests.
-                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "merge", `origin/${nextBranch}`);
+            if (nextBranch === "main") {
+                // This is the latest version so merge changes that were pushed to main.
+                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "merge", "origin/main");
             }
         }
 
@@ -294,12 +292,22 @@ class AlphaPublisher extends Publisher {
 
         // Nothing to do if there are no changes and dependencies haven't been updated.
         if (this.anyChanges(repositoryPublishState.phaseDateTime) || repositoryPublishState.anyDependenciesUpdated) {
-            const switchToAlpha = repositoryPublishState.preReleaseIdentifier !== "alpha";
+            let parsedVersion = repositoryPublishState.parsedVersion;
+
+            const switchToAlpha = parsedVersion.preReleaseIdentifier !== "alpha";
 
             if (switchToAlpha) {
                 this.setOrganizationAlphaRegistry();
 
-                this.updatePackageVersion(undefined, undefined, repositoryPublishState.patchVersion + 1, "alpha");
+                // Pre-release identifier "pending" indicates that patch version should remain unchanged.
+                const version = this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.preReleaseIdentifier === "pending" ? parsedVersion.patchVersion : parsedVersion.patchVersion + 1, "alpha");
+
+                // Parsed version is updated in previous call.
+                parsedVersion = repositoryPublishState.parsedVersion;
+
+                this.updatePhaseState({
+                    version
+                });
             }
 
             if (!this.#updateAll) {
@@ -370,7 +378,7 @@ class AlphaPublisher extends Publisher {
             // Nothing further required if this repository is not a dependency of others.
             if (repository.dependencyType === "external" || repository.dependencyType === "internal") {
                 // Package version is transient.
-                const version = this.updatePackageVersion(undefined, undefined, undefined, `alpha.${new Date().toISOString().replaceAll(/\D/ug, "").substring(0, 12)}`);
+                const version = this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, "alpha", new Date());
 
                 this.updatePhaseState({
                     version
@@ -380,7 +388,7 @@ class AlphaPublisher extends Publisher {
                     // Publish to development NPM registry.
                     this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "publish", "--tag", `alpha-${repository.workingVersion}`);
 
-                    const priorVersionRegExp = new RegExp(`^${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}.\\d+-alpha.\\d+$`, "u");
+                    const priorVersionRegExp = new RegExp(`^${parsedVersion.majorVersion}.${parsedVersion.minorVersion}.\\d+-alpha.\\d+$`, "u");
 
                     // Unpublish all prior alpha versions with the same working version.
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Output is a JSON array.
@@ -390,8 +398,8 @@ class AlphaPublisher extends Publisher {
                         }
                     }
                 } finally {
-                    // Restore package version without date/time stamp.
-                    this.updatePackageVersion(undefined, undefined, undefined, "alpha");
+                    // Restore package version without date/time stamp but don't propagate to configuration.
+                    this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, "alpha");
                 }
             }
 
