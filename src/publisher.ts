@@ -195,7 +195,7 @@ export abstract class Publisher {
     /**
      * At organization registry parameter.
      */
-    readonly #atOrganizationRegistry: string;
+    readonly #atOrganizationRegistryParameter: string;
 
     /**
      * Publish state for current repository. Final value will point to this repository if needed for finalization.
@@ -236,7 +236,7 @@ export abstract class Publisher {
 
         this.#atOrganization = `@${this.configuration.organization}`;
 
-        this.#atOrganizationRegistry = `${this.atOrganization}:registry${phase === "alpha" ? `=${this.configuration.alphaRegistry}` : ""}`;
+        this.#atOrganizationRegistryParameter = `${this.atOrganization}:registry`;
     }
 
     /**
@@ -286,13 +286,6 @@ export abstract class Publisher {
      */
     protected get atOrganization(): string {
         return this.#atOrganization;
-    }
-
-    /**
-     * Get the at organization registry parameter.
-     */
-    protected get atOrganizationRegistry(): string {
-        return this.#atOrganizationRegistry;
     }
 
     /**
@@ -364,6 +357,20 @@ export abstract class Publisher {
 
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Type is determined above.
         return latestDateTime as IsRequired extends true ? Date : Date | undefined;
+    }
+
+    /**
+     * Set the alpha registry for the organization.
+     */
+    setOrganizationAlphaRegistry(): void {
+        this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", "set", `${this.#atOrganizationRegistryParameter}=${this.configuration.alphaRegistry}`, "--location", "project");
+    }
+
+    /**
+     * Unset the alpha registry for the organization.
+     */
+    unsetOrganizationAlphaRegistry(): void {
+        this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", "delete", this.#atOrganizationRegistryParameter, "--location", "project");
     }
 
     /**
