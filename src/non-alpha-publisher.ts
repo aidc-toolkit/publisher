@@ -182,16 +182,17 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
      * Error message to throw if timed out waiting for job to start.
      */
     async #runJob(jobRunner: () => Promisable<JobState>, timeoutMessage: string): Promise<void> {
-        let waitCount = 0;
         let wasRunning = false;
         let complete = false;
+
+        const timeout = Date.now() + 5 * 60 * 1000;
 
         do {
             // eslint-disable-next-line no-await-in-loop,@typescript-eslint/no-implied-eval -- Loop depends on awaited response.
             switch (await setTimeout(2000).then(jobRunner)) {
                 case "waiting":
                     // Abort if job still waiting after five minutes.
-                    if (++waitCount === 150) {
+                    if (Date.now() > timeout) {
                         throw new Error(timeoutMessage);
                     }
                     break;
