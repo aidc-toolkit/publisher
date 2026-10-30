@@ -7,7 +7,7 @@ import { Publisher, RunOptions } from "./publisher.js";
 /**
  * Alpha release publisher.
  */
-class AlphaPublisher extends Publisher {
+class AlphaPublisher extends Publisher<"alpha"> {
     /**
      * If true, publish fast, skipping unnecessary checks.
      */
@@ -65,21 +65,19 @@ class AlphaPublisher extends Publisher {
         const repositoryPublishState = this.repositoryPublishState;
         const repository = repositoryPublishState.repository;
 
-        // Helper repositories don't have pull request processes.
-        if (repository.dependencyType !== "helper") {
-            const phaseStates = repository.phaseStates;
+        const phaseStates = repository.phaseStates;
 
-            const alphaDateTime = phaseStates.alpha?.dateTime;
-            const prodDateTime = phaseStates.prod?.dateTime;
-            const nextBranch = this.getNextBranch();
+        const alphaDateTime = phaseStates.alpha?.dateTime;
+        const prodDateTime = phaseStates.prod?.dateTime;
+        const nextBranch = this.getNextBranch();
 
-            if (alphaDateTime !== undefined && prodDateTime !== undefined && alphaDateTime.getTime() < prodDateTime.getTime() && nextBranch !== undefined) {
-                // Fetch all changes.
-                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "fetch");
+        if (alphaDateTime !== undefined && prodDateTime !== undefined && alphaDateTime.getTime() < prodDateTime.getTime() && nextBranch !== undefined) {
+            // Fetch all changes.
+            this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "fetch");
 
-                // Merge changes that were pushed to the next branch.
-                // TODO Review this; this will bring in everything, but want only merged pull requests.
-                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "merge", `origin/${nextBranch}`);
+            if (nextBranch === "main") {
+                // This is the latest version so merge changes that were pushed to main.
+                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "merge", "origin/main");
             }
         }
 
@@ -299,7 +297,11 @@ class AlphaPublisher extends Publisher {
                 // Use specified registry for organization until no longer in alpha mode.
                 this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", "set", this.atOrganizationRegistry, "--location", "project");
 
-                this.updatePackageVersion(undefined, undefined, repositoryPublishState.patchVersion + 1, "alpha");
+                const version = this.updatePackageVersion(undefined, undefined, repositoryPublishState.patchVersion + 1, "alpha");
+
+                this.updatePhaseState({
+                    version
+                });
             }
 
             if (!this.#updateAll) {
@@ -388,7 +390,7 @@ class AlphaPublisher extends Publisher {
                         }
                     }
                 } finally {
-                    // Restore package version without date/time stamp.
+                    // Restore package version without date/time stamp but don't propagate to configuration.
                     this.updatePackageVersion(undefined, undefined, undefined, "alpha");
                 }
             }

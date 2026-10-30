@@ -67,7 +67,7 @@ type JobState = "waiting" | "running" | "complete";
 /**
  * Non-alpha release publisher.
  */
-export class NonAlphaPublisher extends Publisher {
+class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
     /**
      * Secure configuration.
      */
@@ -141,8 +141,8 @@ export class NonAlphaPublisher extends Publisher {
     protected override isValidBranch(): boolean {
         const repositoryPublishState = this.repositoryPublishState;
 
-        // Branch for non-alpha phase must match version for anything other than helper repository.
-        return repositoryPublishState.repository.dependencyType === "helper" || repositoryPublishState.branch === `v${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}`;
+        // Branch for non-alpha phase must match version.
+        return repositoryPublishState.branch === `v${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}`;
     }
 
     /**
@@ -173,7 +173,7 @@ export class NonAlphaPublisher extends Publisher {
     }
 
     /**
-     * Run a job. Waits up to 20 seconds for job to start and then runs until complete.
+     * Run a job. Waits up to five minutes for job to start and then runs until complete.
      *
      * @param jobRunner
      * Job runner.
@@ -190,8 +190,8 @@ export class NonAlphaPublisher extends Publisher {
             // eslint-disable-next-line no-await-in-loop,@typescript-eslint/no-implied-eval -- Loop depends on awaited response.
             switch (await setTimeout(2000).then(jobRunner)) {
                 case "waiting":
-                    // Abort if job still waiting after two minutes.
-                    if (++waitCount === 60) {
+                    // Abort if job still waiting after five minutes.
+                    if (++waitCount === 150) {
                         throw new Error(timeoutMessage);
                     }
                     break;
@@ -266,7 +266,7 @@ export class NonAlphaPublisher extends Publisher {
         const preReleaseIdentifier = repositoryPublishState.preReleaseIdentifier;
 
         const phase = this.phase;
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Only alpha has a null previous phase.
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Non-alpha phases have non-null previous phase.
         const previousPhase = PREVIOUS_PHASE[phase]!;
         const nextPhase = NEXT_PHASE[phase];
         const preReleasePhase = preReleaseIdentifier ?? "prod";
@@ -281,12 +281,9 @@ export class NonAlphaPublisher extends Publisher {
             // Production version has no pre-release identifier.
             const version = this.updatePackageVersion(undefined, undefined, undefined, phase !== "prod" ? phase : null);
 
-            if (repository.dependencyType === "external" || repository.dependencyType === "internal") {
-                // Save version to be picked up by dependents.
-                this.updatePhaseState({
-                    version
-                });
-            }
+            this.updatePhaseState({
+                version
+            });
 
             // Alpha phase uses local registry.
             if (previousPhase === "alpha") {
@@ -359,15 +356,12 @@ export class NonAlphaPublisher extends Publisher {
                 this.commitUpdatedPackageVersion();
             });
 
-            // Helper repositories don't use tags.
-            if (repository.dependencyType !== "helper") {
-                await this.#runStep("tag", () => {
-                    this.run(RunOptions.SkipOnDryRun, false, false, "git", "tag", tag);
-                });
-            }
+            await this.#runStep("tag", () => {
+                this.run(RunOptions.SkipOnDryRun, false, false, "git", "tag", tag);
+            });
 
             await this.#runStep("push", () => {
-                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "push", "--atomic", "origin", branch, ...repository.dependencyType !== "helper" ? [tag] : []);
+                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "push", "--atomic", "origin", branch, tag);
             });
 
             if (hasPushWorkflow) {
@@ -399,8 +393,8 @@ export class NonAlphaPublisher extends Publisher {
                 }
             }
 
-            // Helper repositories don't have version flow.
-            if (repository.dependencyType !== "helper" && phase === "prod") {
+            // Pull requests apply only to production publication.
+            if (phase === "prod") {
                 await this.#runStep("pull request", async () =>
                     this.#octokit.rest.pulls.create({
                         owner: this.configuration.organization,
@@ -442,7 +436,20 @@ export class NonAlphaPublisher extends Publisher {
 
         this.commitModified(`Published ${this.phase} release.`, SHARED_CONFIGURATION_PATH);
 
-        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "push", "--atomic", "origin", this.repositoryPublishState.branch);
+        const repositoryPublishState = this.repositoryPublishState;
+
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Phase state exists.
+        const version = repositoryPublishState.repository.phaseStates[this.phase]!.version;
+
+        const tag = `v${version}`;
+
+        // Move local tag to latest commit.
+        this.run(RunOptions.SkipOnDryRun, false, false, "git", "tag", "--delete", tag);
+        this.run(RunOptions.SkipOnDryRun, false, false, "git", "tag", tag);
+
+        // Delete remote tag and push latest commit and updated tag to remote.
+        this.run(RunOptions.SkipOnDryRun, false, false, "git", "push", "--atomic", "--delete", "origin", tag);
+        this.run(RunOptions.SkipOnDryRun, false, false, "git", "push", "--atomic", "origin", repositoryPublishState.branch, tag);
     }
 }
 
