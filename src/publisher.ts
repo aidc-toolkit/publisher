@@ -198,9 +198,9 @@ export abstract class Publisher {
     readonly #atOrganizationRegistry: string;
 
     /**
-     * Publish state for current repository.
+     * Publish state for current repository. Final value will point to this repository if needed for finalization.
      */
-    #repositoryPublishState: RepositoryPublishState | undefined = undefined;
+    #repositoryPublishState?: RepositoryPublishState;
 
     /**
      * Constructor.
@@ -1148,8 +1148,6 @@ export abstract class Publisher {
 
                             delete this.publishState.repositoryName;
                             delete this.publishState.step;
-
-                            this.#repositoryPublishState = undefined;
                         } finally {
                             // Return to the start directory.
                             process.chdir(startDirectory);
