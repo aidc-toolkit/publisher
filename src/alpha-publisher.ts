@@ -213,10 +213,11 @@ class AlphaPublisher extends Publisher<"alpha"> {
      */
     protected override async publish(): Promise<void> {
         const repositoryPublishState = this.repositoryPublishState;
+        const repository = repositoryPublishState.repository;
         const packageConfiguration = repositoryPublishState.packageConfiguration;
 
         // Check for external updates, even if there are no changes, if not in fast mode and working on the latest version.
-        if (!this.#fast && repositoryPublishState.repository.workingVersion === this.latestVersion) {
+        if (!this.#fast && repository.workingVersion === this.latestVersion) {
             const latestSemanticUpdatesMap = this.checkUpdates("semver");
             const latestUpdatesMap = this.checkUpdates("latest");
 
@@ -369,7 +370,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
             }
 
             // Nothing further required if this repository is not a dependency of others.
-            if (repositoryPublishState.repository.dependencyType === "external" || repositoryPublishState.repository.dependencyType === "internal") {
+            if (repository.dependencyType === "external" || repository.dependencyType === "internal") {
                 // Package version is transient.
                 const version = this.updatePackageVersion(undefined, undefined, undefined, `alpha.${new Date().toISOString().replaceAll(/\D/ug, "").substring(0, 12)}`);
 
@@ -379,12 +380,14 @@ class AlphaPublisher extends Publisher<"alpha"> {
 
                 try {
                     // Publish to development NPM registry.
-                    this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "publish", "--tag", "alpha");
+                    this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "publish", "--tag", `alpha-${repository.workingVersion}`);
 
-                    // Unpublish all prior alpha versions.
+                    const priorVersionRegExp = new RegExp(`^${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}.\\d+-alpha.\\d+$`, "u");
+
+                    // Unpublish all prior alpha versions with the same working version.
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Output is a JSON array.
                     for (const priorVersion of JSON.parse(this.run(RunOptions.RunAlways, true, false, "npm", "view", packageConfiguration.name, "versions", "--json").join("\n")) as string[]) {
-                        if (/^\d+.\d+.\d+-alpha.\d+$/u.test(priorVersion) && priorVersion !== version) {
+                        if (priorVersionRegExp.test(priorVersion) && priorVersion !== version) {
                             this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "unpublish", `${packageConfiguration.name}@${priorVersion}`);
                         }
                     }
