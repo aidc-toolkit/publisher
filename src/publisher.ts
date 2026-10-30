@@ -200,7 +200,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     /**
      * Publish state for current repository.
      */
-    #repositoryPublishState: RepositoryPublishState | undefined;
+    #repositoryPublishState: RepositoryPublishState | undefined = undefined;
 
     /**
      * Constructor.
@@ -248,8 +248,6 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
         this.#atOrganization = `@${this.configuration.organization}`;
 
         this.#atOrganizationRegistry = `${this.atOrganization}:registry${phase === "alpha" ? `=${this.configuration.alphaRegistry}` : ""}`;
-
-        this.#repositoryPublishState = undefined;
     }
 
     /**
@@ -405,22 +403,10 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     /**
      * Determine if branch is valid for the phase.
      *
-     * @param repository
-     * Repository.
-     *
-     * @param branch
-     * Branch.
-     *
-     * @param majorVersion
-     * Major version.
-     *
-     * @param minorVersion
-     * Minor version.
-     *
      * @returns
      * True if branch is valid for the phase.
      */
-    protected abstract isValidBranch(repository: Repository, branch: string, majorVersion: number, minorVersion: number): boolean;
+    protected abstract isValidBranch(): boolean;
 
     /**
      * Run a command and optionally capture its output.
@@ -1010,39 +996,12 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Package configuration format is known.
         const packageConfiguration = JSON.parse(fs.readFileSync(Publisher.#PACKAGE_CONFIGURATION_PATH).toString()) as PackageConfiguration;
 
-        let {
+        const {
             majorVersion,
             minorVersion,
             patchVersion,
             preReleaseIdentifier
         } = parseVersion(packageConfiguration.version);
-
-        if (!this.isValidBranch(repository, branch, majorVersion, minorVersion)) {
-            throw new Error(`Branch ${branch} is not valid for ${this.phase} phase`);
-        }
-
-        const parsedBranchGroups = /^v(?<branchMajorVersion>\d+)\.(?<branchMinorVersion>\d+)/u.exec(branch)?.groups;
-
-        // If this is a version branch, update the package version if required.
-        if (parsedBranchGroups !== undefined) {
-            const branchMajorVersion = Number(parsedBranchGroups["branchMajorVersion"]);
-            const branchMinorVersion = Number(parsedBranchGroups["branchMinorVersion"]);
-
-            // If in a version branch and version doesn't match, update it.
-            if (majorVersion !== branchMajorVersion || minorVersion !== branchMinorVersion) {
-                if (majorVersion !== branchMajorVersion ? majorVersion !== branchMajorVersion - 1 || branchMinorVersion !== 0 : minorVersion !== branchMinorVersion - 1) {
-                    throw new Error(`Invalid transition from ${majorVersion}.${minorVersion} to ${branchMajorVersion}.${branchMinorVersion}`);
-                }
-
-                majorVersion = branchMajorVersion;
-                minorVersion = branchMinorVersion;
-                patchVersion = 0;
-                preReleaseIdentifier = undefined;
-
-                this.updatePackageVersion(branchMajorVersion, branchMinorVersion, 0, null);
-                this.commitUpdatedPackageVersion(Publisher.#PACKAGE_CONFIGURATION_PATH);
-            }
-        }
 
         this.#repositoryPublishState = {
             repositoryName,
@@ -1061,12 +1020,43 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
 
         const repositoryPublishState = this.#repositoryPublishState;
 
+        if (!this.isValidBranch()) {
+            throw new Error(`Branch ${branch} is not valid for ${this.phase} phase`);
+        }
+
+        const parsedBranchGroups = /^v(?<branchMajorVersion>\d+)\.(?<branchMinorVersion>\d+)/u.exec(branch)?.groups;
+
+        // If this is a version branch, update the package version if required.
+        if (parsedBranchGroups !== undefined) {
+            const branchMajorVersion = Number(parsedBranchGroups["branchMajorVersion"]);
+            const branchMinorVersion = Number(parsedBranchGroups["branchMinorVersion"]);
+
+            // If in a version branch and version doesn't match, update it.
+            if (majorVersion !== branchMajorVersion || minorVersion !== branchMinorVersion) {
+                if (this.phase !== "alpha") {
+                    throw new Error("Version transition not permitted except in alpha phase");
+                }
+
+                if (majorVersion !== branchMajorVersion ? majorVersion !== branchMajorVersion - 1 || branchMinorVersion !== 0 : minorVersion !== branchMinorVersion - 1) {
+                    throw new Error(`Invalid transition from ${majorVersion}.${minorVersion} to ${branchMajorVersion}.${branchMinorVersion}`);
+                }
+
+                this.updatePackageVersion(branchMajorVersion, branchMinorVersion, 0, null);
+                this.commitUpdatedPackageVersion(Publisher.#PACKAGE_CONFIGURATION_PATH);
+
+                // Patch version is set to -1 to allow switch to alpha to start at 0.
+                repositoryPublishState.patchVersion = -1;
+            }
+        }
+
         // Version in repository publish state will be updated if in a new branch.
         // eslint-disable-next-line no-param-reassign -- Repository is necessarily updated as part of building publish state.
         repository.workingVersion = `${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}`;
 
         if (this.phase !== undefined) {
-            const updateDependencyPackageNames: string[] = [];
+            const dependencyPackageNames = [];
+
+            const updateDependencyPackageNamesSet = new Set<string>();
 
             for (const dependencies of [packageConfiguration.devDependencies ?? {}, packageConfiguration.dependencies ?? {}]) {
                 for (const dependencyPackageName of Object.keys(dependencies)) {
@@ -1076,14 +1066,18 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
                     if (dependencyRepositoryName !== null) {
                         this.logger.trace(`Organization dependency ${dependencyPackageName} from package configuration`);
 
+                        const dependencyRepository = this.configuration.repositories[dependencyRepositoryName];
+
+                        dependencyPackageNames.push(dependencyPackageName);
+
                         if (this.#isOrganizationDependencyUpdated(phaseDateTime, dependencyRepositoryName, false)) {
-                            const dependencyWorkingVersion = this.configuration.repositories[dependencyRepositoryName].workingVersion;
+                            const dependencyWorkingVersion = dependencyRepository.workingVersion;
 
                             // Patch version isn't part of working version and is irrelevant to the test.
                             const dependencyParsedVersion = parseVersion(`${dependencyWorkingVersion}.0`);
 
                             // Verify that current repository has a version not less than that of any dependency.
-                            if (majorVersion < dependencyParsedVersion.majorVersion || (majorVersion === dependencyParsedVersion.majorVersion && (minorVersion < dependencyParsedVersion.minorVersion || (minorVersion === dependencyParsedVersion.minorVersion && patchVersion < dependencyParsedVersion.patchVersion)))) {
+                            if (repositoryPublishState.majorVersion < dependencyParsedVersion.majorVersion || (repositoryPublishState.majorVersion === dependencyParsedVersion.majorVersion && (repositoryPublishState.minorVersion < dependencyParsedVersion.minorVersion || (repositoryPublishState.minorVersion === dependencyParsedVersion.minorVersion && (repositoryPublishState.patchVersion !== -1 ? repositoryPublishState.patchVersion : 0) < dependencyParsedVersion.patchVersion)))) {
                                 throw new Error(`Repository version ${packageConfiguration.version} is less than ${dependencyRepositoryName} dependency version ${dependencyWorkingVersion}`);
                             }
 
@@ -1093,7 +1087,13 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
                                 // Dependency will be updated alongside all other dependencies.
                                 dependencies[dependencyPackageName] = dependencyRepositoryVersion;
                             } else {
-                                updateDependencyPackageNames.push(dependencyPackageName);
+                                updateDependencyPackageNamesSet.add(dependencyPackageName);
+
+                                if (dependencyRepository.dependencyPackageNames !== undefined) {
+                                    for (const dependencyDependencyPackageName of dependencyRepository.dependencyPackageNames) {
+                                        updateDependencyPackageNamesSet.add(dependencyDependencyPackageName);
+                                    }
+                                }
                             }
 
                             repositoryPublishState.anyDependenciesUpdated = true;
@@ -1102,9 +1102,17 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
                 }
             }
 
-            if (updateDependencyPackageNames.length !== 0) {
+            if (dependencyPackageNames.length !== 0) {
+                // eslint-disable-next-line no-param-reassign -- Dependency package names are determined in this method.
+                repository.dependencyPackageNames = dependencyPackageNames;
+            } else {
+                // eslint-disable-next-line no-param-reassign -- Dependency package names are determined in this method.
+                delete repository.dependencyPackageNames;
+            }
+
+            if (updateDependencyPackageNamesSet.size !== 0) {
                 // Run "npm update" to force update of repository packages whose configured version didn't change.
-                this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "update", ...updateDependencyPackageNames);
+                this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "update", ...updateDependencyPackageNamesSet);
             }
 
             // Saving the package configuration would affect check for any changes so defer it.
@@ -1171,6 +1179,8 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
 
                             delete this.publishState.repositoryName;
                             delete this.publishState.step;
+
+                            this.#repositoryPublishState = undefined;
                         } finally {
                             // Return to the start directory.
                             process.chdir(startDirectory);
@@ -1190,7 +1200,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
 
             this.#saveConfiguration();
         } catch (e) {
-            this.logger.error(e);
+            this.logger.error("Publish all failed", e);
         }
     }
 

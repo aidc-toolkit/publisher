@@ -1,3 +1,4 @@
+import { DEFAULT_LANGUAGE } from "@aidc-toolkit/core";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as process from "node:process";
@@ -216,17 +217,24 @@ class AlphaPublisher extends Publisher<"alpha"> {
 
         // Check for external updates, even if there are no changes, if not in fast mode and working on the latest version.
         if (!this.#fast && repositoryPublishState.repository.workingVersion === this.latestVersion) {
-            const semverUpdatesMap = this.checkUpdates("semver");
+            const latestSemanticUpdatesMap = this.checkUpdates("semver");
             const latestUpdatesMap = this.checkUpdates("latest");
 
             const updatesMap = new Map<string, {
-                semverVersion?: string;
+                /**
+                 * Latest semantic version available.
+                 */
+                latestSemanticVersion?: string;
+
+                /**
+                 * Latest version available.
+                 */
                 latestVersion?: string;
             }>();
 
-            for (const [packageName, semverVersion] of semverUpdatesMap) {
+            for (const [packageName, latestSemanticVersion] of latestSemanticUpdatesMap) {
                 updatesMap.set(packageName, {
-                    semverVersion
+                    latestSemanticVersion
                 });
             }
 
@@ -242,35 +250,33 @@ class AlphaPublisher extends Publisher<"alpha"> {
                 }
             }
 
-            for (const currentDependencies of [packageConfiguration.devDependencies, packageConfiguration.dependencies]) {
-                if (currentDependencies !== undefined) {
-                    for (const [dependencyPackageName, version] of Object.entries(currentDependencies)) {
-                        // Ignore organization dependencies and any version that goes beyond basic compatible and approximate versions.
-                        if (this.dependencyRepositoryName(dependencyPackageName) === null && (version.startsWith("^") || version.startsWith("~"))) {
-                            const update = updatesMap.get(dependencyPackageName);
+            for (const dependencies of [packageConfiguration.devDependencies ?? {}, packageConfiguration.dependencies ?? {}]) {
+                for (const [dependencyPackageName, version] of Object.entries(dependencies)) {
+                    // Ignore organization dependencies and any version that goes beyond basic compatible and approximate versions.
+                    if (this.dependencyRepositoryName(dependencyPackageName) === null && (version.startsWith("^") || version.startsWith("~"))) {
+                        const update = updatesMap.get(dependencyPackageName);
 
-                            if (update !== undefined) {
-                                const compatibleUpdatePending = update.semverVersion !== undefined;
-                                const incompatibleUpdatePending = update.latestVersion !== undefined && update.latestVersion !== update.semverVersion;
-                                const manualUpdatePending = incompatibleUpdatePending && version.includes(" ");
+                        if (update !== undefined) {
+                            const compatibleUpdatePending = update.latestSemanticVersion !== undefined;
+                            const incompatibleUpdatePending = update.latestVersion !== undefined && update.latestVersion !== update.latestSemanticVersion;
+                            const manualUpdatePending = incompatibleUpdatePending && version.includes(" ");
 
-                                if (compatibleUpdatePending) {
-                                    this.logger.info(`Dependency ${dependencyPackageName} ${!this.#updateAll ? "pending update" : "updating"} from version ${version} to version ${update.semverVersion}.`);
-                                }
+                            if (compatibleUpdatePending) {
+                                this.logger.info(`Dependency ${dependencyPackageName} ${!this.#updateAll ? "pending update" : "updating"} from version ${version} to version ${update.latestSemanticVersion}.`);
+                            }
 
-                                if (incompatibleUpdatePending) {
-                                    this.logger.warn(`Dependency ${dependencyPackageName} has ${!manualUpdatePending ? "incompatible" : "manual"} update pending from version ${version} to ${update.latestVersion}.`);
-                                }
+                            if (incompatibleUpdatePending) {
+                                this.logger.warn(`Dependency ${dependencyPackageName} has ${!manualUpdatePending ? "incompatible" : "manual"} update pending from version ${version} to ${update.latestVersion}.`);
+                            }
 
-                                if (this.#updateAll && !manualUpdatePending) {
-                                    // eslint-disable-next-line no-await-in-loop -- Can't proceed without getting an answer.
-                                    const updateVersion = incompatibleUpdatePending && !this.dryRun && await this.ask(`Update ${dependencyPackageName} to 1) ${compatibleUpdatePending ? update.semverVersion : version} (${compatibleUpdatePending ? "" : "no change, "}default) or 2) ${update.latestVersion}? [1/2] `, ["1", "2"]) === "1" ? update.semverVersion : update.latestVersion;
+                            if (this.#updateAll && !manualUpdatePending) {
+                                // eslint-disable-next-line no-await-in-loop -- Can't proceed without getting an answer.
+                                const updateVersion = incompatibleUpdatePending && !this.dryRun && await this.ask(`Update ${dependencyPackageName} to 1) ${compatibleUpdatePending ? update.latestSemanticVersion : version} (${compatibleUpdatePending ? "" : "no change, "}default) or 2) ${update.latestVersion}? [1/2] `, ["1", "2"]) === "1" ? update.latestSemanticVersion : update.latestVersion;
 
-                                    if (updateVersion !== undefined) {
-                                        currentDependencies[dependencyPackageName] = updateVersion;
+                                if (updateVersion !== undefined) {
+                                    dependencies[dependencyPackageName] = updateVersion;
 
-                                        repositoryPublishState.savePackageConfigurationPending = true;
-                                    }
+                                    repositoryPublishState.savePackageConfigurationPending = true;
                                 }
                             }
                         }
@@ -340,14 +346,14 @@ class AlphaPublisher extends Publisher<"alpha"> {
                     }
 
                     if (localeResourcesMap.size !== 0) {
-                        const enResources = localeResourcesMap.get("en");
+                        const enResources = localeResourcesMap.get(DEFAULT_LANGUAGE);
 
                         if (enResources === undefined) {
                             throw new Error("English resources file not found");
                         }
 
                         for (const [locale, resources] of localeResourcesMap.entries()) {
-                            if (locale !== "en") {
+                            if (locale !== DEFAULT_LANGUAGE) {
                                 AlphaPublisher.#assertValidResources(enResources, locale, resources);
                             }
                         }
@@ -402,6 +408,6 @@ const argv = process.argv;
 const publisher = new AlphaPublisher(argv.includes("--fast"), argv.includes("--update-all"), argv.includes("--dry-run"));
 
 publisher.publishAll().catch((e: unknown) => {
-    publisher.logger.error(e);
+    publisher.logger.error("Publisher failed", e);
     process.exit(1);
 });

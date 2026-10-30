@@ -6,13 +6,16 @@ import { setTimeout } from "node:timers/promises";
 import { Octokit } from "octokit";
 import { parse as yamlParse } from "yaml";
 import secureConfigurationJSON from "../config/publisher.secure.json" with { type: "json" };
-import { NEXT_PHASE, type Phase, PREVIOUS_PHASE, type Repository, SHARED_CONFIGURATION_PATH } from "./configuration.js";
+import { NEXT_PHASE, type Phase, PREVIOUS_PHASE, SHARED_CONFIGURATION_PATH } from "./configuration.js";
 import { Publisher, RunOptions } from "./publisher.js";
 
 /**
  * Configuration layout of publisher.secure.json.
  */
 interface SecureConfiguration {
+    /**
+     * Token.
+     */
     token: string;
 }
 
@@ -135,9 +138,11 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
     /**
      * @inheritDoc
      */
-    protected override isValidBranch(repository: Repository, branch: string, majorVersion: number, minorVersion: number): boolean {
+    protected override isValidBranch(): boolean {
+        const repositoryPublishState = this.repositoryPublishState;
+
         // Branch for non-alpha phase must match version.
-        return branch === `v${majorVersion}.${minorVersion}`;
+        return repositoryPublishState.branch === `v${repositoryPublishState.majorVersion}.${repositoryPublishState.minorVersion}`;
     }
 
     /**
@@ -458,6 +463,6 @@ if (phase !== "beta" && phase !== "prod") {
 const publisher = new NonAlphaPublisher(phase, process.argv.includes("--dry-run"));
 
 publisher.publishAll().catch((e: unknown) => {
-    publisher.logger.error(e);
+    publisher.logger.error("Publisher failed", e);
     process.exit(1);
 });
