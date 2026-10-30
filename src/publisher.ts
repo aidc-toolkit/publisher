@@ -491,7 +491,7 @@ export abstract class Publisher {
             // eslint-disable-next-line promise/avoid-new -- Method doesn't meet promisify callback requirements.
             return new Promise((resolve) => {
                 readlineInterface.question(question, (providedAnswer) => {
-                    let answer: string | undefined = undefined;
+                    let answer;
 
                     if (validAnswers !== undefined && validAnswers.length !== 0) {
                         if (providedAnswer === "") {
@@ -518,7 +518,8 @@ export abstract class Publisher {
      * Next branch or undefined if current branch is not a version branch.
      */
     protected getNextBranch(): string | undefined {
-        let nextBranch: string | undefined = undefined;
+        let nextBranch;
+
         let nextBranchVersionIndex = this.configuration.versions.indexOf(this.repositoryPublishState.branch.substring(1));
 
         if (nextBranchVersionIndex !== -1) {
