@@ -476,7 +476,7 @@ export abstract class Publisher {
      * Answer.
      */
     protected async ask(question: string, validAnswers?: string[]): Promise<string> {
-        const readlineInterface = readline.createInterface({
+        using readlineInterface = readline.createInterface({
             input: process.stdin,
             output: process.stdout
         });
@@ -508,9 +508,7 @@ export abstract class Publisher {
             });
         }
 
-        return askUntilValid().finally(() => {
-            readlineInterface.close();
-        });
+        return await askUntilValid();
     }
 
     /**
