@@ -1,4 +1,3 @@
-import { DEFAULT_LANGUAGE } from "@aidc-toolkit/core";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as process from "node:process";
@@ -352,14 +351,14 @@ class AlphaPublisher extends Publisher<"alpha"> {
                     }
 
                     if (localeResourcesMap.size !== 0) {
-                        const enResources = localeResourcesMap.get(DEFAULT_LANGUAGE);
+                        const enResources = localeResourcesMap.get("en");
 
                         if (enResources === undefined) {
                             throw new Error("English resources file not found");
                         }
 
                         for (const [locale, resources] of localeResourcesMap.entries()) {
-                            if (locale !== DEFAULT_LANGUAGE) {
+                            if (locale !== "en") {
                                 AlphaPublisher.#assertValidResources(enResources, locale, resources);
                             }
                         }

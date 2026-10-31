@@ -137,7 +137,12 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     /**
      * Configuration path for package.json.
      */
-    static readonly #PACKAGE_CONFIGURATION_PATH = "package.json";
+    protected static readonly PACKAGE_CONFIGURATION_PATH = "package.json";
+
+    /**
+     * Configuration path for package-lock.json.
+     */
+    protected static readonly PACKAGE_LOCK_CONFIGURATION_PATH = "package-lock.json";
 
     /**
      * Configuration path for package-lock.json.
@@ -789,7 +794,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
         if (this.dryRun) {
             this.logger.info(`Dry run: Saving package configuration\n${JSON.stringify(pick(packageConfiguration, "name", "version", "devDependencies", "dependencies"), null, 2)}\n`);
         } else {
-            fs.writeFileSync(Publisher.#PACKAGE_CONFIGURATION_PATH, `${JSON.stringify(packageConfiguration, null, 2)}\n`);
+            fs.writeFileSync(Publisher.PACKAGE_CONFIGURATION_PATH, `${JSON.stringify(packageConfiguration, null, 2)}\n`);
         }
 
         repositoryPublishState.savePackageConfigurationPending = false;
@@ -974,7 +979,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
         const branch = this.run(RunOptions.RunAlways, true, false, "git", "branch", "--show-current")[0];
 
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Package configuration format is known.
-        const packageConfiguration = JSON.parse(fs.readFileSync(Publisher.#PACKAGE_CONFIGURATION_PATH).toString()) as PackageConfiguration;
+        const packageConfiguration = JSON.parse(fs.readFileSync(Publisher.PACKAGE_CONFIGURATION_PATH).toString()) as PackageConfiguration;
 
         let parsedVersion = parseVersion(packageConfiguration.version);
 
