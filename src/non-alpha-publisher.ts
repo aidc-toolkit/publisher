@@ -396,16 +396,34 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
 
             // Pull requests apply only to production publication.
             if (phase === "prod") {
-                await this.#runStep("pull request", async () =>
-                    this.#octokit.rest.pulls.create({
-                        owner: this.configuration.organization,
-                        repo: repositoryPublishState.repositoryName,
-                        title: `Production version ${version}`,
-                        head: branch,
-                        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Branch is known to be a version branch.
-                        base: this.getNextBranch()!
-                    })
-                );
+                // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Branch is known to be a version branch.
+                const nextBranch = this.getNextBranch()!;
+
+                let prBranch;
+
+                // Conflict resolution with GitHub web interface or other tools can backfill old version with new version code, so create a separate branch if not requesting pull to main.
+                if (nextBranch !== "main") {
+                    prBranch = `${branch}/pr/${new Date().toISOString()}`;
+
+                    this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "branch", prBranch);
+                    this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "push", "--atomic", "origin", prBranch);
+                } else {
+                    prBranch = branch;
+                }
+
+                if (this.dryRun) {
+                    this.logger.info(`Dry run: Pull request from ${prBranch} to ${nextBranch}`);
+                } else {
+                    await this.#runStep("pull request", async () => {
+                        await this.#octokit.rest.pulls.create({
+                            owner: this.configuration.organization,
+                            repo: repositoryPublishState.repositoryName,
+                            title: `Production version ${version}`,
+                            head: prBranch,
+                            base: nextBranch
+                        });
+                    });
+                }
             }
 
             // External repositories need to give the NPM registry time to reindex.
