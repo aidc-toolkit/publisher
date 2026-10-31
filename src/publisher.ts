@@ -1,12 +1,13 @@
 import {
     getLogger,
+    i18nCoreCLILanguageDetector,
     i18nCoreInit,
-    I18nLanguageDetectors,
     type ParsedVersion,
     parseVersion,
     pick,
     type Promisable
 } from "@aidc-toolkit/core";
+import i18next from "i18next";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as process from "node:process";
@@ -1122,7 +1123,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
      */
     async publishAll(): Promise<void> {
         try {
-            await i18nCoreInit(I18nLanguageDetectors.CLI, false);
+            await i18nCoreInit(i18next.use(i18nCoreCLILanguageDetector));
 
             if (this.publishState.repositoryName === undefined) {
                 this.initialize();
