@@ -212,21 +212,29 @@ class AlphaPublisher extends Publisher<"alpha"> {
      */
     protected override async publish(): Promise<void> {
         const repositoryPublishState = this.repositoryPublishState;
+        const repository = repositoryPublishState.repository;
         const packageConfiguration = repositoryPublishState.packageConfiguration;
 
         // Check for external updates, even if there are no changes, if not in fast mode and working on the latest version.
-        if (!this.#fast && repositoryPublishState.repository.workingVersion === this.latestVersion) {
-            const semverUpdatesMap = this.checkUpdates("semver");
+        if (!this.#fast && repository.workingVersion === this.latestVersion) {
+            const latestSemanticUpdatesMap = this.checkUpdates("semver");
             const latestUpdatesMap = this.checkUpdates("latest");
 
             const updatesMap = new Map<string, {
-                semverVersion?: string;
+                /**
+                 * Latest semantic version available.
+                 */
+                latestSemanticVersion?: string;
+
+                /**
+                 * Latest version available.
+                 */
                 latestVersion?: string;
             }>();
 
-            for (const [packageName, semverVersion] of semverUpdatesMap) {
+            for (const [packageName, latestSemanticVersion] of latestSemanticUpdatesMap) {
                 updatesMap.set(packageName, {
-                    semverVersion
+                    latestSemanticVersion
                 });
             }
 
@@ -242,35 +250,33 @@ class AlphaPublisher extends Publisher<"alpha"> {
                 }
             }
 
-            for (const currentDependencies of [packageConfiguration.devDependencies, packageConfiguration.dependencies]) {
-                if (currentDependencies !== undefined) {
-                    for (const [dependencyPackageName, version] of Object.entries(currentDependencies)) {
-                        // Ignore organization dependencies and any version that goes beyond basic compatible and approximate versions.
-                        if (this.dependencyRepositoryName(dependencyPackageName) === null && (version.startsWith("^") || version.startsWith("~"))) {
-                            const update = updatesMap.get(dependencyPackageName);
+            for (const dependencies of [packageConfiguration.devDependencies ?? {}, packageConfiguration.dependencies ?? {}]) {
+                for (const [dependencyPackageName, version] of Object.entries(dependencies)) {
+                    // Ignore organization dependencies and any version that goes beyond basic compatible and approximate versions.
+                    if (this.dependencyRepositoryName(dependencyPackageName) === null && (version.startsWith("^") || version.startsWith("~"))) {
+                        const update = updatesMap.get(dependencyPackageName);
 
-                            if (update !== undefined) {
-                                const compatibleUpdatePending = update.semverVersion !== undefined;
-                                const incompatibleUpdatePending = update.latestVersion !== undefined && update.latestVersion !== update.semverVersion;
-                                const manualUpdatePending = incompatibleUpdatePending && version.includes(" ");
+                        if (update !== undefined) {
+                            const compatibleUpdatePending = update.latestSemanticVersion !== undefined;
+                            const incompatibleUpdatePending = update.latestVersion !== undefined && update.latestVersion !== update.latestSemanticVersion;
+                            const manualUpdatePending = incompatibleUpdatePending && version.includes(" ");
 
-                                if (compatibleUpdatePending) {
-                                    this.logger.info(`Dependency ${dependencyPackageName} ${!this.#updateAll ? "pending update" : "updating"} from version ${version} to version ${update.semverVersion}.`);
-                                }
+                            if (compatibleUpdatePending) {
+                                this.logger.info(`Dependency ${dependencyPackageName} ${!this.#updateAll ? "pending update" : "updating"} from version ${version} to version ${update.latestSemanticVersion}.`);
+                            }
 
-                                if (incompatibleUpdatePending) {
-                                    this.logger.warn(`Dependency ${dependencyPackageName} has ${!manualUpdatePending ? "incompatible" : "manual"} update pending from version ${version} to ${update.latestVersion}.`);
-                                }
+                            if (incompatibleUpdatePending) {
+                                this.logger.warn(`Dependency ${dependencyPackageName} has ${!manualUpdatePending ? "incompatible" : "manual"} update pending from version ${version} to ${update.latestVersion}.`);
+                            }
 
-                                if (this.#updateAll && !manualUpdatePending) {
-                                    // eslint-disable-next-line no-await-in-loop -- Can't proceed without getting an answer.
-                                    const updateVersion = incompatibleUpdatePending && !this.dryRun && await this.ask(`Update ${dependencyPackageName} to 1) ${compatibleUpdatePending ? update.semverVersion : version} (${compatibleUpdatePending ? "" : "no change, "}default) or 2) ${update.latestVersion}? [1/2] `, ["1", "2"]) === "1" ? update.semverVersion : update.latestVersion;
+                            if (this.#updateAll && !manualUpdatePending) {
+                                // eslint-disable-next-line no-await-in-loop -- Can't proceed without getting an answer.
+                                const updateVersion = incompatibleUpdatePending && !this.dryRun && await this.ask(`Update ${dependencyPackageName} to 1) ${compatibleUpdatePending ? update.latestSemanticVersion : version} (${compatibleUpdatePending ? "" : "no change, "}default) or 2) ${update.latestVersion}? [1/2] `, ["1", "2"]) === "1" ? update.latestSemanticVersion : update.latestVersion;
 
-                                    if (updateVersion !== undefined) {
-                                        currentDependencies[dependencyPackageName] = updateVersion;
+                                if (updateVersion !== undefined) {
+                                    dependencies[dependencyPackageName] = updateVersion;
 
-                                        repositoryPublishState.savePackageConfigurationPending = true;
-                                    }
+                                    repositoryPublishState.savePackageConfigurationPending = true;
                                 }
                             }
                         }
@@ -285,13 +291,18 @@ class AlphaPublisher extends Publisher<"alpha"> {
 
         // Nothing to do if there are no changes and dependencies haven't been updated.
         if (this.anyChanges(repositoryPublishState.phaseDateTime) || repositoryPublishState.anyDependenciesUpdated) {
-            const switchToAlpha = repositoryPublishState.preReleaseIdentifier !== "alpha";
+            let parsedVersion = repositoryPublishState.parsedVersion;
+
+            const switchToAlpha = parsedVersion.preReleaseIdentifier !== "alpha";
 
             if (switchToAlpha) {
-                // Use specified registry for organization until no longer in alpha mode.
-                this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", "set", this.atOrganizationRegistry, "--location", "project");
+                this.setOrganizationAlphaRegistry();
 
-                const version = this.updatePackageVersion(undefined, undefined, repositoryPublishState.patchVersion + 1, "alpha");
+                // Pre-release identifier "pending" indicates that patch version should remain unchanged.
+                const version = this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.preReleaseIdentifier === "pending" ? parsedVersion.patchVersion : parsedVersion.patchVersion + 1, "alpha");
+
+                // Parsed version is updated in previous call.
+                parsedVersion = repositoryPublishState.parsedVersion;
 
                 this.updatePhaseState({
                     version
@@ -364,9 +375,9 @@ class AlphaPublisher extends Publisher<"alpha"> {
             }
 
             // Nothing further required if this repository is not a dependency of others.
-            if (repositoryPublishState.repository.dependencyType === "external" || repositoryPublishState.repository.dependencyType === "internal") {
+            if (repository.dependencyType === "external" || repository.dependencyType === "internal") {
                 // Package version is transient.
-                const version = this.updatePackageVersion(undefined, undefined, undefined, `alpha.${new Date().toISOString().replaceAll(/\D/ug, "").substring(0, 12)}`);
+                const version = this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, "alpha", new Date());
 
                 this.updatePhaseState({
                     version
@@ -374,18 +385,20 @@ class AlphaPublisher extends Publisher<"alpha"> {
 
                 try {
                     // Publish to development NPM registry.
-                    this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "publish", "--tag", "alpha");
+                    this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "publish", "--tag", `alpha-${repository.workingVersion}`);
 
-                    // Unpublish all prior alpha versions.
+                    const priorVersionRegExp = new RegExp(`^${parsedVersion.majorVersion}.${parsedVersion.minorVersion}.\\d+-alpha.\\d+$`, "u");
+
+                    // Unpublish all prior alpha versions with the same working version.
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Output is a JSON array.
                     for (const priorVersion of JSON.parse(this.run(RunOptions.RunAlways, true, false, "npm", "view", packageConfiguration.name, "versions", "--json").join("\n")) as string[]) {
-                        if (/^\d+.\d+.\d+-alpha.\d+$/u.test(priorVersion) && priorVersion !== version) {
+                        if (priorVersionRegExp.test(priorVersion) && priorVersion !== version) {
                             this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "unpublish", `${packageConfiguration.name}@${priorVersion}`);
                         }
                     }
                 } finally {
                     // Restore package version without date/time stamp but don't propagate to configuration.
-                    this.updatePackageVersion(undefined, undefined, undefined, "alpha");
+                    this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, "alpha");
                 }
             }
 
@@ -402,6 +415,6 @@ const argv = process.argv;
 const publisher = new AlphaPublisher(argv.includes("--fast"), argv.includes("--update-all"), argv.includes("--dry-run"));
 
 publisher.publishAll().catch((e: unknown) => {
-    publisher.logger.error(e);
+    publisher.logger.error("Publisher failed", e);
     process.exit(1);
 });

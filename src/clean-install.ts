@@ -42,8 +42,12 @@ class CleanInstall extends Publisher<undefined> {
     protected override publish(): void {
         const repositoryPublishState = this.repositoryPublishState;
 
-        // Configure project registry based on pre-release identifier.
-        this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", repositoryPublishState.preReleaseIdentifier === "alpha" ? "set" : "delete", this.atOrganizationRegistry, "--location", "project");
+        // Configure organization registry based on pre-release identifier.
+        if (repositoryPublishState.parsedVersion.preReleaseIdentifier === "alpha") {
+            this.setOrganizationAlphaRegistry();
+        } else {
+            this.unsetOrganizationAlphaRegistry();
+        }
 
         if (repositoryPublishState.repositoryName !== "publisher") {
             this.run(RunOptions.SkipOnDryRun, false, false, "npm", "clean-install");
@@ -55,6 +59,6 @@ class CleanInstall extends Publisher<undefined> {
 const publisher = new CleanInstall(process.argv.includes("--dry-run"));
 
 publisher.publishAll().catch((e: unknown) => {
-    publisher.logger.error(e);
+    publisher.logger.error("Publisher failed", e);
     process.exit(1);
 });

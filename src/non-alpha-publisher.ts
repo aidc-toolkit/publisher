@@ -6,13 +6,16 @@ import { setTimeout } from "node:timers/promises";
 import { Octokit } from "octokit";
 import { parse as yamlParse } from "yaml";
 import secureConfigurationJSON from "../config/publisher.secure.json" with { type: "json" };
-import { NEXT_PHASE, type Phase, PREVIOUS_PHASE, type Repository, SHARED_CONFIGURATION_PATH } from "./configuration.js";
+import { NEXT_PHASE, type Phase, PREVIOUS_PHASE, SHARED_CONFIGURATION_PATH } from "./configuration.js";
 import { Publisher, RunOptions } from "./publisher.js";
 
 /**
  * Configuration layout of publisher.secure.json.
  */
 interface SecureConfiguration {
+    /**
+     * Token.
+     */
     token: string;
 }
 
@@ -135,9 +138,11 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
     /**
      * @inheritDoc
      */
-    protected override isValidBranch(repository: Repository, branch: string, majorVersion: number, minorVersion: number): boolean {
+    protected override isValidBranch(): boolean {
+        const parsedVersion = this.repositoryPublishState.parsedVersion;
+
         // Branch for non-alpha phase must match version.
-        return branch === `v${majorVersion}.${minorVersion}`;
+        return this.repositoryPublishState.branch === `v${parsedVersion.majorVersion}.${parsedVersion.minorVersion}`;
     }
 
     /**
@@ -177,16 +182,17 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
      * Error message to throw if timed out waiting for job to start.
      */
     async #runJob(jobRunner: () => Promisable<JobState>, timeoutMessage: string): Promise<void> {
-        let waitCount = 0;
         let wasRunning = false;
         let complete = false;
+
+        const timeout = Date.now() + 5 * 60 * 1000;
 
         do {
             // eslint-disable-next-line no-await-in-loop,@typescript-eslint/no-implied-eval -- Loop depends on awaited response.
             switch (await setTimeout(2000).then(jobRunner)) {
                 case "waiting":
                     // Abort if job still waiting after five minutes.
-                    if (++waitCount === 150) {
+                    if (Date.now() > timeout) {
                         throw new Error(timeoutMessage);
                     }
                     break;
@@ -258,13 +264,13 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
         const repositoryPublishState = this.repositoryPublishState;
         const repository = repositoryPublishState.repository;
         const branch = repositoryPublishState.branch;
-        const preReleaseIdentifier = repositoryPublishState.preReleaseIdentifier;
+        const parsedVersion = repositoryPublishState.parsedVersion;
 
         const phase = this.phase;
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Non-alpha phases have non-null previous phase.
         const previousPhase = PREVIOUS_PHASE[phase]!;
         const nextPhase = NEXT_PHASE[phase];
-        const preReleasePhase = preReleaseIdentifier ?? "prod";
+        const preReleasePhase = parsedVersion.preReleaseIdentifier ?? "prod";
 
         let skip = false;
 
@@ -274,15 +280,15 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
             }
 
             // Production version has no pre-release identifier.
-            const version = this.updatePackageVersion(undefined, undefined, undefined, phase !== "prod" ? phase : null);
+            const version = this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, phase !== "prod" ? phase : undefined);
 
             this.updatePhaseState({
                 version
             });
 
-            // Alpha phase uses local registry.
+            // Alpha phase uses separate registry.
             if (previousPhase === "alpha") {
-                this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", "delete", this.atOrganizationRegistry, "--location", "project");
+                this.unsetOrganizationAlphaRegistry();
 
                 // Patch package-lock.json with default registry in case some beta versions were installed indirectly.
                 this.run(RunOptions.SkipOnDryRun, false, false, "sed", "-i", "", "-e", `s/${this.configuration.alphaRegistry.replace(/(?<c>[./])/ug, "\\$<c>")}/https:\\/\\/registry\\.npmjs\\.org\\//`, "package-lock.json");
@@ -458,6 +464,6 @@ if (phase !== "beta" && phase !== "prod") {
 const publisher = new NonAlphaPublisher(phase, process.argv.includes("--dry-run"));
 
 publisher.publishAll().catch((e: unknown) => {
-    publisher.logger.error(e);
+    publisher.logger.error("Publisher failed", e);
     process.exit(1);
 });
