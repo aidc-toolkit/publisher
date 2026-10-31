@@ -406,8 +406,12 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
                     if (nextBranch !== "main") {
                         prBranch = `${branch}-pr-${new Date().toISOString().replaceAll(/\D/ug, "").substring(0, 12)}`;
 
-                        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "branch", prBranch);
+                        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "checkout", "-b", prBranch);
+                        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "restore", `--source=origin/${nextBranch}`, "--", Publisher.PACKAGE_CONFIGURATION_PATH, Publisher.PACKAGE_LOCK_CONFIGURATION_PATH);
+                        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "commit", "-m", "Patched package.json and package-lock.json from downstream version.", Publisher.PACKAGE_CONFIGURATION_PATH, Publisher.PACKAGE_LOCK_CONFIGURATION_PATH);
                         this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "push", "--atomic", "origin", prBranch);
+                        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "checkout", branch);
+                        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "branch", "-D", prBranch);
                     } else {
                         prBranch = branch;
                     }
