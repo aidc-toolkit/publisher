@@ -1,5 +1,12 @@
-import { getLogger, i18nCoreInit, type ParsedVersion, parseVersion, pick, type Promisable } from "@aidc-toolkit/core";
-import { i18nCoreCLILanguageDetector } from "@aidc-toolkit/core/src/index.js";
+import {
+    getLogger,
+    i18nCoreCLILanguageDetector,
+    i18nCoreInit,
+    type ParsedVersion,
+    parseVersion,
+    pick,
+    type Promisable
+} from "@aidc-toolkit/core";
 import i18next from "i18next";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
