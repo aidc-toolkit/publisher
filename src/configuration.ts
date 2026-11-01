@@ -35,14 +35,14 @@ export const PREVIOUS_PHASE: Readonly<Record<Phase, Phase | null>> = {
  */
 export interface PhaseState {
     /**
+     * Version the phase was last published.
+     */
+    version: string;
+
+    /**
      * Date/time the phase was last published.
      */
     dateTime?: Date;
-
-    /**
-     * Version; used by dependents.
-     */
-    version?: string | undefined;
 }
 
 /**
@@ -194,11 +194,11 @@ interface JSONSharedConfiguration extends Omit<Readonly<SharedConfiguration>, "r
 /**
  * Publish state.
  */
-export interface PublishState {
+export interface PublishState<TPhase extends Phase | undefined = Phase> {
     /**
-     * Current phase in publication.
+     * Current phase in publication or undefined if not publishing.
      */
-    phase: Phase;
+    phase: TPhase;
 
     /**
      * Current repository name in publication.
