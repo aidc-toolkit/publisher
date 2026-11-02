@@ -1,11 +1,11 @@
-import { type LogLevelKey, omit, pick, propertyAs } from "@aidc-toolkit/core";
-import * as fs from "node:fs";
+import { type LogLevelKey, pick } from "@aidc-toolkit/core";
+import { FileAppDataStorage } from "@aidc-toolkit/core/src/file-app-data-storage.js";
 import type { Logger } from "tslog";
-import sharedConfigurationJSON from "../config/publisher.json" with { type: "json" };
-import localConfigurationJSON from "../config/publisher.local.json" with { type: "json" };
 
-export const SHARED_CONFIGURATION_PATH = "config/publisher.json";
-export const LOCAL_CONFIGURATION_PATH = "config/publisher.local.json";
+const SHARED_CONFIGURATION_KEY = "config/publisher";
+const LOCAL_CONFIGURATION_KEY = "config/publisher.local";
+
+export const SHARED_CONFIGURATION_PATH = `${SHARED_CONFIGURATION_KEY}.json`;
 
 /**
  * Phase.
@@ -46,16 +46,6 @@ export interface PhaseState {
 }
 
 /**
- * Phase state in JSON file.
- */
-interface JSONPhaseState extends Omit<Readonly<PhaseState>, "dateTime"> {
-    /**
-     * Date/time the phase was last published, as a string.
-     */
-    readonly dateTime?: string;
-}
-
-/**
  * Dependency type.
  *
  * - external
@@ -64,14 +54,13 @@ interface JSONPhaseState extends Omit<Readonly<PhaseState>, "dateTime"> {
  * - internal
  *   - Internal (private) dependency of one or more other repositories
  *   - Installed from GitHub
- *   - May require "prepare" script( https://docs.npmjs.com/cli/using-npm/scripts)
+ *   - May require "prepare" script (https://docs.npmjs.com/cli/using-npm/scripts)
  *   - May require GitHub authentication
  * - application
  *   - Published application
  * - helper
  *   - Internal helper
- *   - Not subject to normal publication process
- *   - May exist on any branch, but primarily on main
+ *   - Not subject to rigid publication process
  */
 export type DependencyType = "external" | "internal" | "application" | "helper";
 
@@ -106,21 +95,6 @@ interface SharedRepository {
 }
 
 /**
- * Shared repository configuration in JSON file.
- */
-interface JSONSharedRepository extends Omit<Readonly<SharedRepository>, "dependencyType" | "phaseStates"> {
-    /**
-     * Dependency type, dictating how it is published, as a string.
-     */
-    readonly dependencyType: string;
-
-    /**
-     * Beta and production phase states.
-     */
-    readonly phaseStates?: Readonly<Partial<Record<"beta" | "prod", JSONPhaseState>>>;
-}
-
-/**
  * Local repository configuration.
  */
 interface LocalRepository {
@@ -141,23 +115,13 @@ interface LocalRepository {
 }
 
 /**
- * Local repository configuration in JSON file.
- */
-interface JSONLocalRepository extends Omit<Readonly<LocalRepository>, "phaseStates"> {
-    /**
-     * Alpha phase state.
-     */
-    readonly phaseStates?: Readonly<Partial<Record<"alpha", JSONPhaseState>>>;
-}
-
-/**
  * Repository.
  */
 export interface Repository extends SharedRepository, LocalRepository {
     /**
      * Phase states.
      */
-    readonly phaseStates: Partial<Record<Exclude<Phase, "clean-install">, PhaseState>>;
+    readonly phaseStates: Partial<Record<Phase, PhaseState>>;
 }
 
 /**
@@ -182,16 +146,6 @@ interface SharedConfiguration {
 }
 
 /**
- * Shared configuration in JSON file.
- */
-interface JSONSharedConfiguration extends Omit<Readonly<SharedConfiguration>, "repositories"> {
-    /**
-     * Repositories.
-     */
-    readonly repositories: Readonly<Record<string, JSONSharedRepository>>;
-}
-
-/**
  * Publish state.
  */
 export interface PublishState<TPhase extends Phase | undefined = Phase> {
@@ -209,16 +163,6 @@ export interface PublishState<TPhase extends Phase | undefined = Phase> {
      * Current step in publication.
      */
     step?: string;
-}
-
-/**
- * Publish state in JSON file.
- */
-export interface JSONPublishState extends Omit<Readonly<PublishState>, "phase"> {
-    /**
-     * Current phase in publication, as a string.
-     */
-    readonly phase: string;
 }
 
 /**
@@ -252,26 +196,6 @@ interface LocalConfiguration {
 }
 
 /**
- * Local configuration in JSON file.
- */
-interface JSONLocalConfiguration extends Omit<Readonly<LocalConfiguration>, "logLevel" | "publishState" | "repositories"> {
-    /**
-     * Log level, as a string.
-     */
-    readonly logLevel?: string;
-
-    /**
-     * Publish state.
-     */
-    readonly publishState?: JSONPublishState;
-
-    /**
-     * Repositories.
-     */
-    readonly repositories: Readonly<Partial<Record<string, JSONLocalRepository>>>;
-}
-
-/**
  * Configuration.
  */
 export interface Configuration extends SharedConfiguration, LocalConfiguration {
@@ -281,75 +205,52 @@ export interface Configuration extends SharedConfiguration, LocalConfiguration {
     readonly repositories: Readonly<Record<string, Repository>>;
 }
 
-let jsonSharedConfiguration: JSONSharedConfiguration = sharedConfigurationJSON;
-let jsonLocalConfiguration: JSONLocalConfiguration = localConfigurationJSON;
-
-/**
- * Map JSON phase states to internal phase states.
- *
- * @param jsonPhaseStates
- * JSON phase states.
- *
- * @returns
- * Internal phase states.
- */
-function fromJSONPhaseStates(jsonPhaseStates: Readonly<Partial<Record<Phase, JSONPhaseState>>> | undefined): Readonly<Partial<Record<Phase, PhaseState>>> {
-    return Object.fromEntries(Object.entries(jsonPhaseStates ?? {}).map(([phase, jsonPhaseState]) => [phase, jsonPhaseState.dateTime !== undefined ?
-        {
-            ...jsonPhaseState,
-            dateTime: new Date(jsonPhaseState.dateTime)
-        } :
-        jsonPhaseState]));
-}
-
 /**
  * Load configuration from JSON files.
  *
  * @returns
  * Configuration.
  */
-export function loadConfiguration(): Configuration {
+export async function loadConfiguration(): Promise<Configuration> {
+    const appDataStorage = new FileAppDataStorage(".");
+
+    const sharedConfigurationAppData = await appDataStorage.read(SHARED_CONFIGURATION_KEY);
+
+    if (sharedConfigurationAppData === undefined || typeof sharedConfigurationAppData !== "object") {
+        throw new Error("Shared configuration not found or not valid.");
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Assume shared configuration is valid.
+    const sharedConfiguration = sharedConfigurationAppData as SharedConfiguration;
+
+    const localConfigurationAppData = await appDataStorage.read(LOCAL_CONFIGURATION_KEY);
+
+    if (localConfigurationAppData === undefined || typeof localConfigurationAppData !== "object") {
+        throw new Error("Local configuration not found or not valid.");
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Assume local configuration is valid.
+    const localConfiguration = localConfigurationAppData as LocalConfiguration;
+
     // Merge shared and local configurations.
     return {
-        ...jsonSharedConfiguration,
-        ...omit(jsonLocalConfiguration, "logLevel", "publishState"),
-        ...propertyAs<JSONLocalConfiguration, "logLevel", LogLevelKey>(jsonLocalConfiguration, "logLevel"),
-        ...propertyAs<JSONLocalConfiguration, "publishState", PublishState>(jsonLocalConfiguration, "publishState"),
-        repositories: Object.fromEntries(Object.entries(jsonSharedConfiguration.repositories).map(([repositoryName, jsonSharedRepository]) => {
-            const jsonLocalRepository = jsonLocalConfiguration.repositories[repositoryName] ?? {
+        ...sharedConfiguration,
+        ...localConfiguration,
+        repositories: Object.fromEntries(Object.entries(sharedConfiguration.repositories).map(([repositoryName, sharedRepository]) => {
+            const localRepository = localConfiguration.repositories[repositoryName] ?? {
                 workingVersion: ""
             };
 
             return [repositoryName, {
-                ...jsonSharedRepository,
-                ...propertyAs<JSONSharedRepository, "dependencyType", DependencyType>(jsonSharedRepository, "dependencyType"),
-                ...jsonLocalRepository,
+                ...sharedRepository,
+                ...localRepository,
                 phaseStates: {
-                    ...fromJSONPhaseStates(jsonSharedRepository.phaseStates),
-                    ...fromJSONPhaseStates(jsonLocalRepository.phaseStates)
+                    ...sharedRepository.phaseStates,
+                    ...localRepository.phaseStates
                 }
             }];
         }))
     };
-}
-
-/**
- * Map internal phase states to JSON phase states.
- *
- * @param phaseStates
- * Internal phase states.
- *
- * @returns
- * JSON phase states.
- */
-function toJSONPhaseStates(phaseStates: Readonly<Partial<Record<Phase, PhaseState>>> | undefined): Readonly<Partial<Record<Phase, JSONPhaseState>>> {
-    return Object.fromEntries(Object.entries(phaseStates ?? {}).map(([phase, phaseState]) => [phase, phaseState.dateTime !== undefined ?
-        {
-            ...phaseState,
-            dateTime: phaseState.dateTime.toISOString()
-        } :
-        phaseState]
-    ));
 }
 
 /**
@@ -364,31 +265,30 @@ function toJSONPhaseStates(phaseStates: Readonly<Partial<Record<Phase, PhaseStat
  * @param dryRun
  * If true, outputs to logger rather than file.
  */
-export function saveConfiguration(configuration: Configuration, logger: Logger<object>, dryRun: boolean): void {
-    jsonSharedConfiguration = {
+export async function saveConfiguration(configuration: Configuration, logger: Logger<object>, dryRun: boolean): Promise<void> {
+    const sharedConfiguration: SharedConfiguration = {
         ...pick(configuration as SharedConfiguration, "versions", "organization"),
         repositories: Object.fromEntries(Object.entries(configuration.repositories).map(([repositoryName, repository]) => [repositoryName, {
             ...pick(repository as SharedRepository, "directory", "dependencyType", "additionalDependencies", "excludePaths"),
-            phaseStates: toJSONPhaseStates(pick(repository.phaseStates as NonNullable<SharedRepository["phaseStates"]>, "beta", "prod"))
+            phaseStates: pick(repository.phaseStates as NonNullable<SharedRepository["phaseStates"]>, "beta", "prod")
         }]))
     };
 
-    jsonLocalConfiguration = {
+    const localConfiguration: LocalConfiguration = {
         ...pick(configuration as LocalConfiguration, "logLevel", "additionalArgs", "alphaRegistry", "publishState"),
         repositories: Object.fromEntries(Object.entries(configuration.repositories).map(([repositoryName, repository]) => [repositoryName, {
             ...pick(repository as LocalRepository, "workingVersion", "dependencyPackageNames"),
-            phaseStates: toJSONPhaseStates(pick(repository.phaseStates as NonNullable<LocalRepository["phaseStates"]>, "alpha"))
+            phaseStates: pick(repository.phaseStates as NonNullable<LocalRepository["phaseStates"]>, "alpha")
         }]))
     };
 
-    const saveSharedConfigurationJSON = JSON.stringify(jsonSharedConfiguration, null, 2);
-    const saveLocalConfigurationJSON = JSON.stringify(jsonLocalConfiguration, null, 2);
-
     if (dryRun) {
-        logger.debug(`Dry run: Saving shared configuration\n${saveSharedConfigurationJSON}`);
-        logger.debug(`Dry run: Saving local configuration\n${saveLocalConfigurationJSON}`);
+        logger.debug(`Dry run: Saving shared configuration\n${JSON.stringify(sharedConfiguration, null, 2)}\n`);
+        logger.debug(`Dry run: Saving local configuration\n${JSON.stringify(localConfiguration, null, 2)}\n`);
     } else {
-        fs.writeFileSync(SHARED_CONFIGURATION_PATH, `${saveSharedConfigurationJSON}\n`);
-        fs.writeFileSync(LOCAL_CONFIGURATION_PATH, `${saveLocalConfigurationJSON}\n`);
+        const appDataStorage = new FileAppDataStorage(".");
+
+        await appDataStorage.write(SHARED_CONFIGURATION_KEY, sharedConfiguration);
+        await appDataStorage.write(LOCAL_CONFIGURATION_KEY, localConfiguration);
     }
 }

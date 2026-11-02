@@ -1,7 +1,7 @@
 import {
     getLogger,
     i18nCoreInit,
-    I18nLanguageDetectors,
+    I18nLanguageDetectors, logLevelOf, LogLevels,
     type ParsedVersion,
     parseVersion,
     pick,
@@ -141,11 +141,6 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     /**
      * Configuration path for package-lock.json.
      */
-    protected static readonly PACKAGE_LOCK_CONFIGURATION_PATH = "package-lock.json";
-
-    /**
-     * Configuration path for package-lock.json.
-     */
     static readonly #SOURCE_VERSION_PATH = "src/version.ts";
 
     /**
@@ -159,34 +154,34 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     readonly #dryRun: boolean;
 
     /**
-     * Configuration. Merger of shared and local configurations.
-     */
-    readonly #configuration: Configuration;
-
-    /**
-     * Latest version.
-     */
-    readonly #latestVersion: string;
-
-    /**
-     * Publish state, same as in configuration but always defined during publication.
-     */
-    readonly #publishState: PublishState<TPhase>;
-
-    /**
      * Logger.
      */
     readonly #logger: Logger<object>;
 
     /**
+     * Configuration. Merger of shared and local configurations.
+     */
+    #configuration!: Configuration;
+
+    /**
+     * Latest version.
+     */
+    #latestVersion!: string;
+
+    /**
+     * Publish state, same as in configuration but always defined during publication.
+     */
+    #publishState!: PublishState<TPhase>;
+
+    /**
      * At organization.
      */
-    readonly #atOrganization: string;
+    #atOrganization!: string;
 
     /**
      * At organization registry parameter.
      */
-    readonly #atOrganizationRegistryParameter: string;
+    #atOrganizationRegistryParameter!: string;
 
     /**
      * Publish state for current repository. Final value will point to this repository if needed for finalization.
@@ -206,39 +201,8 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
         this.#phase = phase;
         this.#dryRun = dryRun;
 
-        this.#configuration = loadConfiguration();
-        this.#latestVersion = this.#configuration.versions[this.configuration.versions.length - 1];
-
-        if (phase !== undefined) {
-            let publishState: PublishState;
-
-            if (this.#configuration.publishState === undefined) {
-                publishState = {
-                    phase
-                };
-
-                this.#configuration.publishState = publishState;
-            } else {
-                publishState = this.#configuration.publishState;
-
-                if (publishState.phase !== phase) {
-                    throw new Error(`Attempting to publish ${phase} phase despite incomplete ${publishState.phase} phase`);
-                }
-            }
-
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Type is determined above.
-            this.#publishState = publishState as PublishState<TPhase>;
-        } else {
-            this.#publishState = {
-                phase
-            };
-        }
-
-        this.#logger = getLogger(this.configuration.logLevel);
-
-        this.#atOrganization = `@${this.configuration.organization}`;
-
-        this.#atOrganizationRegistryParameter = `${this.atOrganization}:registry`;
+        // Start with a default log level.
+        this.#logger = getLogger(LogLevels.Info);
     }
 
     /**
@@ -937,8 +901,8 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     /**
      * Save the configuration.
      */
-    #saveConfiguration(): void {
-        saveConfiguration(this.configuration, this.logger, this.dryRun);
+    async #saveConfiguration(): Promise<void> {
+        await saveConfiguration(this.configuration, this.logger, this.dryRun);
     }
 
     /**
@@ -1109,7 +1073,46 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     /**
      * Initialize publication.
      */
-    protected initialize(): void {
+    protected async initialize(): Promise<void> {
+        const configuration = await loadConfiguration();
+
+        this.#configuration = configuration;
+
+        this.logger.settings.minLevel = logLevelOf(configuration.logLevel);
+
+        this.#latestVersion = configuration.versions[configuration.versions.length - 1];
+
+        const phase = this.phase;
+
+        if (phase !== undefined) {
+            let publishState: PublishState;
+
+            if (configuration.publishState === undefined) {
+                publishState = {
+                    phase
+                };
+
+                configuration.publishState = publishState;
+            } else {
+                publishState = configuration.publishState;
+
+                if (publishState.phase !== phase) {
+                    throw new Error(`Attempting to publish ${phase} phase despite incomplete ${publishState.phase} phase`);
+                }
+            }
+
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Type is determined above.
+            this.#publishState = publishState as PublishState<TPhase>;
+        } else {
+            this.#publishState = {
+                phase
+            };
+        }
+
+        const atOrganization = `@${configuration.organization}`;
+
+        this.#atOrganization = atOrganization;
+        this.#atOrganizationRegistryParameter = `${atOrganization}:registry`;
     }
 
     /**
@@ -1122,11 +1125,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
      */
     async publishAll(): Promise<void> {
         try {
-            await i18nCoreInit(I18nLanguageDetectors.CLI, false);
-
-            if (this.publishState.repositoryName === undefined) {
-                this.initialize();
-            }
+            await i18nCoreInit(I18nLanguageDetectors.CLI, false).then(async () => this.initialize());
 
             const startDirectory = process.cwd();
 
@@ -1159,9 +1158,10 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
                             // Return to the start directory.
                             process.chdir(startDirectory);
 
-                            this.#saveConfiguration();
+                            // eslint-disable-next-line no-await-in-loop -- Next iteration requires previous to finish.
+                            await this.#saveConfiguration();
                         }
-                        // Non-external repositories may be private and not accessible to all developers.
+                    // Non-external repositories may be private and not accessible to all developers.
                     } else if (repository.dependencyType === "external") {
                         throw new Error(`Repository ${repositoryName} not found`);
                     }
@@ -1170,9 +1170,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
 
             delete this.configuration.publishState;
 
-            this.finalize();
-
-            this.#saveConfiguration();
+            await this.finalize();
         } catch (e) {
             this.logger.error("Publish all failed", e);
         }
@@ -1181,6 +1179,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     /**
      * Finalize publication.
      */
-    protected finalize(): void {
+    protected async finalize(): Promise<void> {
+        await this.#saveConfiguration();
     }
 }

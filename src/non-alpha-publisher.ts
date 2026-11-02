@@ -435,9 +435,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
     /**
      * @inheritDoc
      */
-    protected override finalize(): void {
-        super.finalize();
-
+    protected override async finalize(): Promise<void> {
         this.commitModified(`Published ${this.phase} release.`, SHARED_CONFIGURATION_PATH);
 
         const repositoryPublishState = this.repositoryPublishState;
@@ -454,6 +452,8 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
         // Delete remote tag and push latest commit and updated tag to remote.
         this.run(RunOptions.SkipOnDryRun, false, false, "git", "push", "--atomic", "--delete", "origin", tag);
         this.run(RunOptions.SkipOnDryRun, false, false, "git", "push", "--atomic", "origin", repositoryPublishState.branch, tag);
+
+        await super.finalize();
     }
 }
 
