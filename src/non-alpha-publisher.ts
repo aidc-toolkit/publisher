@@ -394,37 +394,18 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
                 }
             }
 
-            // Pull requests apply only to production publication.
-            if (phase === "prod") {
+            // Pull requests apply only to production publication when the next branch is main; version-to-version propagation requires manual rebase.
+            if (phase === "prod" && this.getNextBranch() === "main") {
                 await this.#runStep("pull request", async () => {
-                    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Branch is known to be a version branch.
-                    const nextBranch = this.getNextBranch()!;
-
-                    let prBranch;
-
-                    // Conflict resolution with GitHub web interface or other tools can backfill old version with new version code, so create a separate branch if not requesting pull to main.
-                    if (nextBranch !== "main") {
-                        prBranch = `${branch}-pr-${new Date().toISOString().replaceAll(/\D/ug, "").substring(0, 12)}`;
-
-                        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "checkout", "-b", prBranch);
-                        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "restore", `--source=origin/${nextBranch}`, "--", Publisher.PACKAGE_CONFIGURATION_PATH, Publisher.PACKAGE_LOCK_CONFIGURATION_PATH);
-                        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "commit", "-m", "Patched package.json and package-lock.json from downstream version.", Publisher.PACKAGE_CONFIGURATION_PATH, Publisher.PACKAGE_LOCK_CONFIGURATION_PATH);
-                        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "push", "--atomic", "origin", prBranch);
-                        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "checkout", branch);
-                        this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "branch", "-D", prBranch);
-                    } else {
-                        prBranch = branch;
-                    }
-
                     if (this.dryRun) {
-                        this.logger.info(`Dry run: Pull request from ${prBranch} to ${nextBranch}`);
+                        this.logger.info(`Dry run: Pull request from ${branch} to main`);
                     } else {
                         await this.#octokit.rest.pulls.create({
                             owner: this.configuration.organization,
                             repo: repositoryPublishState.repositoryName,
                             title: `Production version ${version}`,
-                            head: prBranch,
-                            base: nextBranch
+                            head: branch,
+                            base: "main"
                         });
                     }
                 });
