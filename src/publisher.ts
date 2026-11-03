@@ -332,14 +332,14 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     /**
      * Set the alpha registry for the organization.
      */
-    setOrganizationAlphaRegistry(): void {
+    protected setOrganizationAlphaRegistry(): void {
         this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", "set", `${this.#atOrganizationRegistryParameter}=${this.configuration.alphaRegistry}`, "--location", "project");
     }
 
     /**
      * Unset the alpha registry for the organization.
      */
-    unsetOrganizationAlphaRegistry(): void {
+    protected unsetOrganizationAlphaRegistry(): void {
         this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", "delete", this.#atOrganizationRegistryParameter, "--location", "project");
     }
 
