@@ -271,7 +271,7 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
                         "/**",
                         " * Repository version, updated automatically during publication.",
                         " */",
-                        `export const VERSION = "${version}";`,
+                        `export const VERSION = "${baseVersion}";`,
                         ""
                     ].join("\n"));
                 }
