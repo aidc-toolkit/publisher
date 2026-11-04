@@ -293,14 +293,10 @@ class AlphaPublisher extends Publisher<"alpha"> {
                 this.setOrganizationAlphaRegistry();
 
                 // Pre-release identifier "pending" indicates that patch version should remain unchanged.
-                const version = repository.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.preReleaseIdentifier === "pending" ? parsedVersion.patchVersion : parsedVersion.patchVersion + 1, "alpha");
+                repository.updatePackageVersion(true, parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.preReleaseIdentifier === "pending" ? parsedVersion.patchVersion : parsedVersion.patchVersion + 1, "alpha");
 
                 // Parsed version is updated in previous call.
                 parsedVersion = repository.parsedVersion;
-
-                repository.updatePhaseState({
-                    version
-                });
             }
 
             if (!this.#updateAll) {
@@ -371,11 +367,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
             // Nothing further required if this repository is not a dependency of others.
             if (repository.dependencyType === "external" || repository.dependencyType === "internal") {
                 // Package version is transient.
-                const version = repository.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, "alpha", new Date());
-
-                repository.updatePhaseState({
-                    version
-                });
+                const version = repository.updatePackageVersion(true, parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, "alpha", new Date());
 
                 try {
                     // Publish to development NPM registry.
@@ -391,14 +383,12 @@ class AlphaPublisher extends Publisher<"alpha"> {
                         }
                     }
                 } finally {
-                    // Restore package version without date/time stamp but don't propagate to configuration.
-                    repository.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, "alpha");
+                    // Restore package version without date/time stamp but don't propagate to phase state.
+                    repository.updatePackageVersion(false, parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, "alpha");
                 }
             }
 
-            repository.updatePhaseState({
-                dateTime: new Date()
-            });
+            repository.updatePhaseDateTime();
         }
     }
 }

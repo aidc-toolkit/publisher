@@ -709,7 +709,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
                 }
 
                 // Update package version with pre-release identifier "pending"; alpha publisher will commit it.
-                repository.updatePackageVersion(branchMajorVersion, branchMinorVersion, 0, "pending");
+                repository.updatePackageVersion(false, branchMajorVersion, branchMinorVersion, 0, "pending");
             }
         }
 

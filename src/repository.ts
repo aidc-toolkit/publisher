@@ -224,6 +224,9 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
     /**
      * Update the package version.
      *
+     * @param propagateToPhaseState
+     * If true, version change should be propagated to phase state.
+     *
      * @param majorVersion
      * Major version.
      *
@@ -242,7 +245,7 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
      * @returns
      * Updated package version.
      */
-    updatePackageVersion(majorVersion: number, minorVersion: number, patchVersion: number, preReleaseIdentifier?: "pending" | "alpha" | "beta", preReleaseDateTime?: Date): string {
+    updatePackageVersion(propagateToPhaseState: boolean, majorVersion: number, minorVersion: number, patchVersion: number, preReleaseIdentifier?: "pending" | "alpha" | "beta", preReleaseDateTime?: Date): string {
         const baseVersion = `${majorVersion}.${minorVersion}.${patchVersion}${preReleaseIdentifier !== undefined ? `-${preReleaseIdentifier}` : ""}`;
 
         const previousParsedVersion = this.#parsedVersion;
@@ -284,6 +287,10 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
                     dependencyPackageNames: []
                 };
             }
+        }
+
+        if (propagateToPhaseState) {
+            this.getPhaseState(true).version = version;
         }
 
         return version;
@@ -409,32 +416,12 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
     }
 
     /**
-     * Update the phase state. This will replace the phase state object in the repository and the repository publish
-     * state and may update the phase date/time in the repository publish state.
-     *
-     * @param phaseState
-     * Partial phases state. Only those properties provided will be updated.
+     * Update the phase date/time, rounded up to the next second for Git resolution alignment.
      */
-    updatePhaseState(phaseState: Partial<PhaseState>): void {
-        const phase = this.#configuration.publishState.phase;
+    updatePhaseDateTime(): void {
+        const now = new Date();
 
-        if (phase === undefined) {
-            throw new Error("Attempting to update phase state for undefined phase");
-        }
-
-        const previousPhaseState = this.getPhaseState(true);
-
-        const phaseStateDateTime = phaseState.dateTime !== undefined ?
-            {
-                // Git resolution is one second so round up to next second to ensure that comparisons work as expected.
-                dateTime: new Date(phaseState.dateTime.getTime() - phaseState.dateTime.getMilliseconds() + 1000)
-            } :
-            {};
-
-        this.versionState.phaseStates[phase] = {
-            ...previousPhaseState,
-            ...phaseState,
-            ...phaseStateDateTime
-        };
+        // Git resolution is one second so round up to next second to ensure that comparisons work as expected.
+        this.getPhaseState(true).dateTime = new Date(now.getTime() - now.getMilliseconds() + 1000);
     }
 }

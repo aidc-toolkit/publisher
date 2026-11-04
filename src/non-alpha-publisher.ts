@@ -274,11 +274,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
             }
 
             // Production version has no pre-release identifier.
-            const version = repository.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, phase !== "prod" ? phase : undefined);
-
-            repository.updatePhaseState({
-                version
-            });
+            repository.updatePackageVersion(true, parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, phase !== "prod" ? phase : undefined);
 
             // Alpha phase uses separate registry.
             if (previousPhase === "alpha") {
@@ -420,9 +416,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
                 }
             }
 
-            repository.updatePhaseState({
-                dateTime: new Date()
-            });
+            repository.updatePhaseDateTime();
         }
     }
 
