@@ -20,7 +20,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
     /**
      * Constructor.
      *
-     * If true, outputs what would be run rather than running it.
+     * If true, outputs what would be produced rather than producing it.
      *
      * @param fast
      * If true, publish fast, skipping unnecessary checks.
@@ -29,42 +29,34 @@ class AlphaPublisher extends Publisher<"alpha"> {
      * If true, update all dependencies automatically.
      *
      * @param dryRun
-     * If true, output what would be run rather than running it.
+     * If true, output what would be produced rather than producing it.
      */
     constructor(fast: boolean, updateAll: boolean, dryRun: boolean) {
+        if (fast && updateAll) {
+            throw new Error("Cannot specify both --fast and --update-all");
+        }
+
         super("alpha", dryRun);
 
         this.#fast = fast;
         this.#updateAll = updateAll;
-
-        if (fast && updateAll) {
-            throw new Error("Cannot specify both --fast and --update-all");
-        }
     }
 
     /**
      * @inheritDoc
      */
     protected override dependencyVersionFor(dependencyRepositoryName: string): string {
-        // Lock to version against which package is being developed.
-        const phaseStateVersion = this.configuration.repositories[dependencyRepositoryName].phaseStates.alpha?.version;
+        const dependencyVersion = this.getPhaseState(dependencyRepositoryName).version;
 
-        if (phaseStateVersion === undefined) {
-            throw new Error(`*** Internal error *** Version not set for dependency ${dependencyRepositoryName}`);
-        }
-
-        // Compatible phase state version syntax will detect updates.
-        return `^${phaseStateVersion.substring(0, phaseStateVersion.lastIndexOf("."))}`;
+        // Compatible version syntax will detect updates.
+        return `^${dependencyVersion.substring(0, dependencyVersion.lastIndexOf("."))}`;
     }
 
     /**
      * @inheritDoc
      */
     protected override isValidRepositoryChange(): boolean {
-        const repositoryPublishState = this.repositoryPublishState;
-        const repository = repositoryPublishState.repository;
-
-        const phaseStates = repository.phaseStates;
+        const phaseStates = this.currentPublishState.repository.versionState.phaseStates;
 
         const alphaDateTime = phaseStates.alpha?.dateTime;
         const prodDateTime = phaseStates.prod?.dateTime;
@@ -211,12 +203,13 @@ class AlphaPublisher extends Publisher<"alpha"> {
      * @inheritDoc
      */
     protected override async publish(): Promise<void> {
-        const repositoryPublishState = this.repositoryPublishState;
-        const repository = repositoryPublishState.repository;
-        const packageConfiguration = repositoryPublishState.packageConfiguration;
+        const currentPublishState = this.currentPublishState;
+        const repository = currentPublishState.repository;
+        const packageConfiguration = repository.packageConfiguration;
+        const workingVersion = this.getRepositoryPublishState().workingVersion;
 
         // Check for external updates, even if there are no changes, if not in fast mode and working on the latest version.
-        if (!this.#fast && repository.workingVersion === this.latestVersion) {
+        if (!this.#fast && workingVersion === this.configuration.latestVersion) {
             const latestSemanticUpdatesMap = this.checkUpdates("semver");
             const latestUpdatesMap = this.checkUpdates("latest");
 
@@ -271,12 +264,12 @@ class AlphaPublisher extends Publisher<"alpha"> {
 
                             if (this.#updateAll && !manualUpdatePending) {
                                 // eslint-disable-next-line no-await-in-loop -- Can't proceed without getting an answer.
-                                const updateVersion = incompatibleUpdatePending && !this.dryRun && await this.ask(`Update ${dependencyPackageName} to 1) ${compatibleUpdatePending ? update.latestSemanticVersion : version} (${compatibleUpdatePending ? "" : "no change, "}default) or 2) ${update.latestVersion}? [1/2] `, ["1", "2"]) === "1" ? update.latestSemanticVersion : update.latestVersion;
+                                const updateVersion = incompatibleUpdatePending && !this.isDryRun && await this.ask(`Update ${dependencyPackageName} to 1) ${compatibleUpdatePending ? update.latestSemanticVersion : version} (${compatibleUpdatePending ? "" : "no change, "}default) or 2) ${update.latestVersion}? [1/2] `, ["1", "2"]) === "1" ? update.latestSemanticVersion : update.latestVersion;
 
                                 if (updateVersion !== undefined) {
                                     dependencies[dependencyPackageName] = updateVersion;
 
-                                    repositoryPublishState.savePackageConfigurationPending = true;
+                                    currentPublishState.savePackageConfigurationPending = true;
                                 }
                             }
                         }
@@ -285,13 +278,13 @@ class AlphaPublisher extends Publisher<"alpha"> {
             }
         }
 
-        if (repositoryPublishState.savePackageConfigurationPending) {
+        if (currentPublishState.savePackageConfigurationPending) {
             this.savePackageConfiguration();
         }
 
         // Nothing to do if there are no changes and dependencies haven't been updated.
-        if (this.anyChanges(repositoryPublishState.phaseDateTime) || repositoryPublishState.anyDependenciesUpdated) {
-            let parsedVersion = repositoryPublishState.parsedVersion;
+        if (this.anyChanges(this.getPhaseDateTime()) || currentPublishState.anyDependenciesUpdated) {
+            let parsedVersion = repository.parsedVersion;
 
             const switchToAlpha = parsedVersion.preReleaseIdentifier !== "alpha";
 
@@ -299,12 +292,12 @@ class AlphaPublisher extends Publisher<"alpha"> {
                 this.setOrganizationAlphaRegistry();
 
                 // Pre-release identifier "pending" indicates that patch version should remain unchanged.
-                const version = this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.preReleaseIdentifier === "pending" ? parsedVersion.patchVersion : parsedVersion.patchVersion + 1, "alpha");
+                const version = repository.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.preReleaseIdentifier === "pending" ? parsedVersion.patchVersion : parsedVersion.patchVersion + 1, "alpha");
 
                 // Parsed version is updated in previous call.
-                parsedVersion = repositoryPublishState.parsedVersion;
+                parsedVersion = repository.parsedVersion;
 
-                this.updatePhaseState({
+                repository.updatePhaseState({
                     version
                 });
             }
@@ -377,15 +370,15 @@ class AlphaPublisher extends Publisher<"alpha"> {
             // Nothing further required if this repository is not a dependency of others.
             if (repository.dependencyType === "external" || repository.dependencyType === "internal") {
                 // Package version is transient.
-                const version = this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, "alpha", new Date());
+                const version = repository.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, "alpha", new Date());
 
-                this.updatePhaseState({
+                repository.updatePhaseState({
                     version
                 });
 
                 try {
                     // Publish to development NPM registry.
-                    this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "publish", "--tag", `alpha-${repository.workingVersion}`);
+                    this.run(RunOptions.ParameterizeOnDryRun, false, false, "npm", "publish", "--tag", `alpha-${workingVersion}`);
 
                     const priorVersionRegExp = new RegExp(`^${parsedVersion.majorVersion}.${parsedVersion.minorVersion}.\\d+-alpha.\\d+$`, "u");
 
@@ -398,11 +391,11 @@ class AlphaPublisher extends Publisher<"alpha"> {
                     }
                 } finally {
                     // Restore package version without date/time stamp but don't propagate to configuration.
-                    this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, "alpha");
+                    repository.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, "alpha");
                 }
             }
 
-            this.updatePhaseState({
+            repository.updatePhaseState({
                 dateTime: new Date()
             });
         }

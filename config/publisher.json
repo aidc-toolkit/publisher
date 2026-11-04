@@ -7,53 +7,69 @@
   "repositories": {
     "dev": {
       "dependencyType": "external",
-      "phaseStates": {
-        "beta": {
-          "dateTime": "dateTime:2026-10-31T19:55:10.000Z",
-          "version": "1.0.50-beta"
-        },
-        "prod": {
-          "version": "1.0.50",
-          "dateTime": "dateTime:2026-10-31T20:33:25.000Z"
+      "versionStates": {
+        "1.0": {
+          "phaseStates": {
+            "beta": {
+              "version": "1.0.50-beta",
+              "dateTime": "dateTime:2026-10-31T19:55:10.000Z"
+            },
+            "prod": {
+              "version": "1.0.50",
+              "dateTime": "dateTime:2026-10-31T20:33:25.000Z"
+            }
+          }
         }
       }
     },
     "core": {
       "dependencyType": "external",
-      "phaseStates": {
-        "beta": {
-          "dateTime": "dateTime:2026-10-31T19:58:15.000Z",
-          "version": "1.0.51-beta"
-        },
-        "prod": {
-          "version": "1.0.51",
-          "dateTime": "dateTime:2026-10-31T20:36:10.000Z"
+      "versionStates": {
+        "1.0": {
+          "phaseStates": {
+            "beta": {
+              "version": "1.0.51-beta",
+              "dateTime": "dateTime:2026-10-31T19:58:15.000Z"
+            },
+            "prod": {
+              "version": "1.0.51",
+              "dateTime": "dateTime:2026-10-31T20:36:10.000Z"
+            }
+          }
         }
       }
     },
     "utility": {
       "dependencyType": "external",
-      "phaseStates": {
-        "beta": {
-          "dateTime": "dateTime:2026-10-31T20:01:05.000Z",
-          "version": "1.0.52-beta"
-        },
-        "prod": {
-          "version": "1.0.52",
-          "dateTime": "dateTime:2026-10-31T20:40:15.000Z"
+      "versionStates": {
+        "1.0": {
+          "phaseStates": {
+            "beta": {
+              "version": "1.0.52-beta",
+              "dateTime": "dateTime:2026-10-31T20:01:05.000Z"
+            },
+            "prod": {
+              "version": "1.0.52",
+              "dateTime": "dateTime:2026-10-31T20:40:15.000Z"
+            }
+          }
         }
       }
     },
     "gs1": {
       "dependencyType": "external",
-      "phaseStates": {
-        "beta": {
-          "dateTime": "dateTime:2026-10-31T20:03:49.000Z",
-          "version": "1.0.53-beta"
-        },
-        "prod": {
-          "version": "1.0.52",
-          "dateTime": "dateTime:2026-10-31T21:21:19.000Z"
+      "versionStates": {
+        "1.0": {
+          "phaseStates": {
+            "beta": {
+              "version": "1.0.53-beta",
+              "dateTime": "dateTime:2026-10-31T20:03:49.000Z"
+            },
+            "prod": {
+              "version": "1.0.52",
+              "dateTime": "dateTime:2026-10-31T21:21:19.000Z"
+            }
+          }
         }
       }
     },
@@ -62,66 +78,86 @@
       "excludePaths": [
         "docs/"
       ],
-      "phaseStates": {
-        "beta": {
-          "dateTime": "dateTime:2026-10-31T20:03:55.000Z",
-          "version": "1.0.53-beta"
-        },
-        "prod": {
-          "version": "1.0.53",
-          "dateTime": "dateTime:2026-10-31T21:23:48.000Z"
+      "versionStates": {
+        "1.0": {
+          "phaseStates": {
+            "beta": {
+              "version": "1.0.53-beta",
+              "dateTime": "dateTime:2026-10-31T20:03:55.000Z"
+            },
+            "prod": {
+              "version": "1.0.53",
+              "dateTime": "dateTime:2026-10-31T21:23:48.000Z"
+            }
+          }
         }
       }
     },
     "demo": {
       "dependencyType": "application",
-      "phaseStates": {
-        "beta": {
-          "dateTime": "dateTime:2026-10-31T20:04:00.000Z",
-          "version": "1.0.56-beta"
-        },
-        "prod": {
-          "version": "1.0.56",
-          "dateTime": "dateTime:2026-10-31T21:23:57.000Z"
+      "versionStates": {
+        "1.0": {
+          "phaseStates": {
+            "beta": {
+              "version": "1.0.56-beta",
+              "dateTime": "dateTime:2026-10-31T20:04:00.000Z"
+            },
+            "prod": {
+              "version": "1.0.56",
+              "dateTime": "dateTime:2026-10-31T21:23:57.000Z"
+            }
+          }
         }
       }
     },
     "app-extension": {
       "dependencyType": "external",
-      "phaseStates": {
-        "beta": {
-          "dateTime": "dateTime:2026-10-31T20:06:01.000Z",
-          "version": "1.0.58-beta"
-        },
-        "prod": {
-          "version": "1.0.58",
-          "dateTime": "dateTime:2026-10-31T21:27:33.000Z"
+      "versionStates": {
+        "1.0": {
+          "phaseStates": {
+            "beta": {
+              "version": "1.0.58-beta",
+              "dateTime": "dateTime:2026-10-31T20:06:01.000Z"
+            },
+            "prod": {
+              "version": "1.0.58",
+              "dateTime": "dateTime:2026-10-31T21:27:33.000Z"
+            }
+          }
         }
       }
     },
     "microsoft-add-in": {
       "dependencyType": "application",
-      "phaseStates": {
-        "beta": {
-          "dateTime": "dateTime:2026-10-31T20:06:08.000Z",
-          "version": "1.0.61-beta"
-        },
-        "prod": {
-          "version": "1.0.61",
-          "dateTime": "dateTime:2026-10-31T21:27:46.000Z"
+      "versionStates": {
+        "1.0": {
+          "phaseStates": {
+            "beta": {
+              "version": "1.0.61-beta",
+              "dateTime": "dateTime:2026-10-31T20:06:08.000Z"
+            },
+            "prod": {
+              "version": "1.0.61",
+              "dateTime": "dateTime:2026-10-31T21:27:46.000Z"
+            }
+          }
         }
       }
     },
     "google-add-on": {
       "dependencyType": "application",
-      "phaseStates": {
-        "beta": {
-          "dateTime": "dateTime:2026-10-31T20:06:19.000Z",
-          "version": "1.0.62-beta"
-        },
-        "prod": {
-          "version": "1.0.62",
-          "dateTime": "dateTime:2026-10-31T21:28:04.000Z"
+      "versionStates": {
+        "1.0": {
+          "phaseStates": {
+            "beta": {
+              "version": "1.0.62-beta",
+              "dateTime": "dateTime:2026-10-31T20:06:19.000Z"
+            },
+            "prod": {
+              "version": "1.0.62",
+              "dateTime": "dateTime:2026-10-31T21:28:04.000Z"
+            }
+          }
         }
       }
     },
@@ -132,31 +168,38 @@
         "demo",
         "microsoft-add-in"
       ],
-      "phaseStates": {
-        "beta": {
-          "dateTime": "dateTime:2026-10-31T20:10:28.000Z",
-          "version": "1.0.63-beta"
-        },
-        "prod": {
-          "version": "1.0.63",
-          "dateTime": "dateTime:2026-10-31T21:31:40.000Z"
+      "versionStates": {
+        "1.0": {
+          "phaseStates": {
+            "beta": {
+              "version": "1.0.63-beta",
+              "dateTime": "dateTime:2026-10-31T20:10:28.000Z"
+            },
+            "prod": {
+              "version": "1.0.63",
+              "dateTime": "dateTime:2026-10-31T21:31:40.000Z"
+            }
+          }
         }
       }
     },
     "publisher": {
       "dependencyType": "helper",
       "excludePaths": [
-        "src/",
         "config/publisher.json"
       ],
-      "phaseStates": {
-        "beta": {
-          "dateTime": "dateTime:2026-10-31T20:10:32.000Z",
-          "version": "1.0.53-beta"
-        },
-        "prod": {
-          "version": "1.0.53",
-          "dateTime": "dateTime:2026-10-31T21:31:49.000Z"
+      "versionStates": {
+        "1.0": {
+          "phaseStates": {
+            "beta": {
+              "version": "1.0.53-beta",
+              "dateTime": "dateTime:2026-10-31T20:10:32.000Z"
+            },
+            "prod": {
+              "version": "1.0.53",
+              "dateTime": "dateTime:2026-10-31T21:31:49.000Z"
+            }
+          }
         }
       }
     }

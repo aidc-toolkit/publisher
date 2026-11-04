@@ -1,128 +1,20 @@
-import { type LogLevelKey, pick } from "@aidc-toolkit/core";
+import { type LogLevelKey, logLevelOf, omit, pick } from "@aidc-toolkit/core";
 import { FileAppDataStorage } from "@aidc-toolkit/core/src/file-app-data-storage.js";
 import type { Logger } from "tslog";
+import type { Phase } from "./phase.js";
+import {
+    type LocalRepository,
+    type RawRepository,
+    Repository,
+    type RepositoryPublishState,
+    type SharedRepository
+} from "./repository.js";
+import type { LocalVersionState, SharedVersionState, VersionState } from "./version-state.js";
 
 const SHARED_CONFIGURATION_KEY = "config/publisher";
 const LOCAL_CONFIGURATION_KEY = "config/publisher.local";
 
 export const SHARED_CONFIGURATION_PATH = `${SHARED_CONFIGURATION_KEY}.json`;
-
-/**
- * Phase.
- */
-export type Phase = "alpha" | "beta" | "prod";
-
-/**
- * Next phase mapping.
- */
-export const NEXT_PHASE: Readonly<Record<Phase, Phase | null>> = {
-    alpha: "beta",
-    beta: "prod",
-    prod: null
-};
-
-/**
- * Previous phase mapping.
- */
-export const PREVIOUS_PHASE: Readonly<Record<Phase, Phase | null>> = {
-    alpha: null,
-    beta: "alpha",
-    prod: "beta"
-};
-
-/**
- * Phase state.
- */
-export interface PhaseState {
-    /**
-     * Version the phase was last published.
-     */
-    version: string;
-
-    /**
-     * Date/time the phase was last published.
-     */
-    dateTime?: Date;
-}
-
-/**
- * Dependency type.
- *
- * - external
- *   - External (public) dependency of one or more other repositories
- *   - Installed from NPM
- * - internal
- *   - Internal (private) dependency of one or more other repositories
- *   - Installed from GitHub
- *   - May require "prepare" script (https://docs.npmjs.com/cli/using-npm/scripts)
- *   - May require GitHub authentication
- * - application
- *   - Published application
- * - helper
- *   - Internal helper
- *   - Not subject to rigid publication process
- */
-export type DependencyType = "external" | "internal" | "application" | "helper";
-
-/**
- * Shared repository configuration.
- */
-interface SharedRepository {
-    /**
-     * Directory in which repository resides, if different from repository name.
-     */
-    readonly directory?: string;
-
-    /**
-     * Dependency type, dictating how it is published.
-     */
-    readonly dependencyType: DependencyType;
-
-    /**
-     * Additional organization dependencies not included in package configuration.
-     */
-    readonly additionalDependencies?: readonly string[];
-
-    /**
-     * Paths to exclude when checking for changes.
-     */
-    readonly excludePaths?: readonly string[];
-
-    /**
-     * Beta and production phase states.
-     */
-    readonly phaseStates?: Readonly<Partial<Record<"beta" | "prod", PhaseState>>>;
-}
-
-/**
- * Local repository configuration.
- */
-interface LocalRepository {
-    /**
-     * Working version of local repository (major and minor versions only).
-     */
-    workingVersion: string;
-
-    /**
-     * Organization dependency package names included in package configuration, updated during build.
-     */
-    dependencyPackageNames?: string[];
-
-    /**
-     * Alpha phase state.
-     */
-    readonly phaseStates?: Readonly<Partial<Record<"alpha", PhaseState>>>;
-}
-
-/**
- * Repository.
- */
-export interface Repository extends SharedRepository, LocalRepository {
-    /**
-     * Phase states.
-     */
-    readonly phaseStates: Partial<Record<Phase, PhaseState>>;
-}
 
 /**
  * Shared configuration.
@@ -148,11 +40,16 @@ interface SharedConfiguration {
 /**
  * Publish state.
  */
-export interface PublishState<TPhase extends Phase | undefined = Phase> {
+export interface PublishState<TPhase extends Phase | undefined> {
     /**
      * Current phase in publication or undefined if not publishing.
      */
-    phase: TPhase;
+    readonly phase: TPhase;
+
+    /**
+     * Repository publish states.
+     */
+    readonly repositoryPublishStates: Record<string, RepositoryPublishState>;
 
     /**
      * Current repository name in publication.
@@ -168,7 +65,12 @@ export interface PublishState<TPhase extends Phase | undefined = Phase> {
 /**
  * Local configuration.
  */
-interface LocalConfiguration {
+interface LocalConfiguration<TPhase extends Phase | undefined> {
+    /**
+     * Registry hosting organization's alpha repositories.
+     */
+    readonly alphaRegistry: string;
+
     /**
      * Log level.
      */
@@ -180,14 +82,9 @@ interface LocalConfiguration {
     readonly additionalArgs?: Readonly<Record<string, string[] | undefined>>;
 
     /**
-     * Registry hosting organization's alpha repositories.
-     */
-    readonly alphaRegistry: string;
-
-    /**
      * Publish state.
      */
-    publishState?: PublishState;
+    publishState?: PublishState<TPhase>;
 
     /**
      * Repositories.
@@ -196,99 +93,318 @@ interface LocalConfiguration {
 }
 
 /**
- * Configuration.
+ * Raw configuration.
  */
-export interface Configuration extends SharedConfiguration, LocalConfiguration {
+interface RawConfiguration<TPhase extends Phase | undefined> extends SharedConfiguration, LocalConfiguration<TPhase> {
     /**
      * Repositories.
      */
-    readonly repositories: Readonly<Record<string, Repository>>;
+    readonly repositories: Readonly<Record<string, RawRepository>>;
 }
 
 /**
- * Load configuration from JSON files.
- *
- * @returns
  * Configuration.
  */
-export async function loadConfiguration(): Promise<Configuration> {
-    const appDataStorage = new FileAppDataStorage(".");
+export class Configuration<TPhase extends Phase | undefined> implements Required<RawConfiguration<TPhase>> {
+    /**
+     * Phase.
+     */
+    readonly #phase: TPhase;
 
-    const sharedConfigurationAppData = await appDataStorage.read(SHARED_CONFIGURATION_KEY);
+    /**
+     * Logger.
+     */
+    readonly #logger: Logger<object>;
 
-    if (sharedConfigurationAppData === undefined || typeof sharedConfigurationAppData !== "object") {
-        throw new Error("Shared configuration not found or not valid.");
+    /**
+     * If true, output what would be produced rather than producing it.
+     */
+    readonly #isDryRun: boolean;
+
+    /**
+     * Raw configuration.
+     */
+    readonly #raw: RawConfiguration<TPhase> & { publishState: PublishState<TPhase> };
+
+    /**
+     * Repositories.
+     */
+    readonly #repositories: Readonly<Record<string, Repository<TPhase>>>;
+
+    /**
+     * Latest version.
+     */
+    readonly #latestVersion: string;
+
+    /**
+     * At organization.
+     */
+    readonly #atOrganization: string;
+
+    /**
+     * At organization registry parameter.
+     */
+    readonly #atOrganizationRegistryParameter: string;
+
+    /**
+     * Constructor.
+     *
+     * @param phase
+     * Phase.
+     *
+     * @param logger
+     * Logger.
+     *
+     * @param isDryRun
+     * If true, output what would be produced rather than producing it.
+     *
+     * @param raw
+     * Raw configuration.
+     */
+    private constructor(phase: TPhase, logger: Logger<object>, isDryRun: boolean, raw: RawConfiguration<TPhase> & { publishState: PublishState<TPhase> }) {
+        this.#phase = phase;
+        this.#logger = logger;
+        this.#isDryRun = isDryRun;
+        this.#raw = raw;
+
+        this.#repositories = Object.fromEntries(Object.entries(raw.repositories).map(([name, rawRepository]) =>
+            [name, new Repository(this, name, rawRepository)]
+        ));
+
+        this.#latestVersion = raw.versions[raw.versions.length - 1];
+
+        const atOrganization = `@${raw.organization}`;
+
+        this.#atOrganization = atOrganization;
+        this.#atOrganizationRegistryParameter = `${atOrganization}:registry`;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Assume shared configuration is valid.
-    const sharedConfiguration = sharedConfigurationAppData as SharedConfiguration;
-
-    const localConfigurationAppData = await appDataStorage.read(LOCAL_CONFIGURATION_KEY);
-
-    if (localConfigurationAppData === undefined || typeof localConfigurationAppData !== "object") {
-        throw new Error("Local configuration not found or not valid.");
+    /**
+     * Get the phase.
+     */
+    get phase(): TPhase {
+        return this.#phase;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Assume local configuration is valid.
-    const localConfiguration = localConfigurationAppData as LocalConfiguration;
+    /**
+     * Get the logger.
+     */
+    get logger(): Logger<object> {
+        return this.#logger;
+    }
 
-    // Merge shared and local configurations.
-    return {
-        ...sharedConfiguration,
-        ...localConfiguration,
-        repositories: Object.fromEntries(Object.entries(sharedConfiguration.repositories).map(([repositoryName, sharedRepository]) => {
-            const localRepository = localConfiguration.repositories[repositoryName] ?? {
-                workingVersion: ""
-            };
+    /**
+     * Determine if output what would be produced rather than producing it.
+     */
+    get isDryRun(): boolean {
+        return this.#isDryRun;
+    }
 
-            return [repositoryName, {
-                ...sharedRepository,
-                ...localRepository,
-                phaseStates: {
-                    ...sharedRepository.phaseStates,
-                    ...localRepository.phaseStates
-                }
-            }];
-        }))
-    };
-}
+    /**
+     * Get the ordered list of versions.
+     */
+    get versions(): string[] {
+        return this.#raw.versions;
+    }
 
-/**
- * Save the configuration.
- *
- * @param configuration
- * Configuration.
- *
- * @param logger
- * Logger.
- *
- * @param dryRun
- * If true, outputs to logger rather than file.
- */
-export async function saveConfiguration(configuration: Configuration, logger: Logger<object>, dryRun: boolean): Promise<void> {
-    const sharedConfiguration: SharedConfiguration = {
-        ...pick(configuration as SharedConfiguration, "versions", "organization"),
-        repositories: Object.fromEntries(Object.entries(configuration.repositories).map(([repositoryName, repository]) => [repositoryName, {
-            ...pick(repository as SharedRepository, "directory", "dependencyType", "additionalDependencies", "excludePaths"),
-            phaseStates: pick(repository.phaseStates as NonNullable<SharedRepository["phaseStates"]>, "beta", "prod")
-        }]))
-    };
+    /**
+     * Get the organization.
+     */
+    get organization(): string {
+        return this.#raw.organization;
+    }
 
-    const localConfiguration: LocalConfiguration = {
-        ...pick(configuration as LocalConfiguration, "logLevel", "additionalArgs", "alphaRegistry", "publishState"),
-        repositories: Object.fromEntries(Object.entries(configuration.repositories).map(([repositoryName, repository]) => [repositoryName, {
-            ...pick(repository as LocalRepository, "workingVersion", "dependencyPackageNames"),
-            phaseStates: pick(repository.phaseStates as NonNullable<LocalRepository["phaseStates"]>, "alpha")
-        }]))
-    };
+    /**
+     * Get the registry hosting organization's alpha repositories.
+     */
+    get alphaRegistry(): string {
+        return this.#raw.alphaRegistry;
+    }
 
-    if (dryRun) {
-        logger.debug(`Dry run: Saving shared configuration\n${JSON.stringify(sharedConfiguration, null, 2)}\n`);
-        logger.debug(`Dry run: Saving local configuration\n${JSON.stringify(localConfiguration, null, 2)}\n`);
-    } else {
+    /**
+     * Get the log level.
+     */
+    get logLevel(): LogLevelKey {
+        return this.#raw.logLevel ?? "Info";
+    }
+
+    /**
+     * Get additional arguments for externally run commands.
+     */
+    get additionalArgs(): never {
+        throw new Error("Direct access to additional arguments forbidden");
+    }
+
+    /**
+     * Get additional arguments for an externally run command.
+     *
+     * @param command
+     * Command.
+     *
+     * @returns
+     * Additional arguments or empty array if none.
+     */
+    getAdditionalArgs(command: string): string[] {
+        return this.#raw.additionalArgs?.[command] ?? [];
+    }
+
+    /**
+     * Get the publish state.
+     */
+    get publishState(): PublishState<TPhase> {
+        return this.#raw.publishState;
+    }
+
+    /**
+     * Get the repositories.
+     */
+    get repositories(): Readonly<Record<string, Repository<TPhase>>> {
+        return this.#repositories;
+    }
+
+    /**
+     * Get the latest version.
+     */
+    get latestVersion(): string {
+        return this.#latestVersion;
+    }
+
+    /**
+     * Get the at organization.
+     */
+    get atOrganization(): string {
+        return this.#atOrganization;
+    }
+
+    /**
+     * Get the at organization registry parameter.
+     */
+    get atOrganizationRegistryParameter(): string {
+        return this.#atOrganizationRegistryParameter;
+    }
+
+    /**
+     * Load configuration from JSON files for a phase.
+     *
+     * @param phase
+     * Phase.
+     *
+     * @param logger
+     * Logger.
+     *
+     * @param isDryRun
+     * If true, output what would be produced rather than producing it.
+     *
+     * @returns
+     * Configuration.
+     */
+    static async load<TPhase extends Phase | undefined>(phase: TPhase, logger: Logger<object>, isDryRun: boolean): Promise<Configuration<TPhase>> {
         const appDataStorage = new FileAppDataStorage(".");
 
-        await appDataStorage.write(SHARED_CONFIGURATION_KEY, sharedConfiguration);
-        await appDataStorage.write(LOCAL_CONFIGURATION_KEY, localConfiguration);
+        const sharedConfigurationAppData = await appDataStorage.read(SHARED_CONFIGURATION_KEY);
+
+        if (sharedConfigurationAppData === undefined || typeof sharedConfigurationAppData !== "object") {
+            throw new Error("Shared configuration not found or not valid.");
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Assume shared configuration is valid.
+        const sharedConfiguration = sharedConfigurationAppData as SharedConfiguration;
+
+        const localConfigurationAppData = await appDataStorage.read(LOCAL_CONFIGURATION_KEY);
+
+        if (localConfigurationAppData === undefined || typeof localConfigurationAppData !== "object") {
+            throw new Error("Local configuration not found or not valid.");
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Assume local configuration is valid.
+        const localConfiguration = localConfigurationAppData as LocalConfiguration<TPhase>;
+
+        const logLevel = localConfiguration.logLevel ?? "Info";
+
+        // eslint-disable-next-line no-param-reassign -- Log level is adjusted to align with configuration.
+        logger.settings.minLevel = logLevelOf(logLevel);
+
+        let publishState = localConfiguration.publishState;
+
+        if (publishState === undefined) {
+            publishState = {
+                phase,
+                repositoryPublishStates: {}
+            };
+        } else if (publishState.phase !== phase) {
+            throw new Error(`Previous publication phase ${publishState.phase} not completed`);
+        }
+
+        // Merge shared and local configurations.
+        return new Configuration(phase, logger, isDryRun, {
+            ...sharedConfiguration,
+            ...localConfiguration,
+            logLevel,
+            additionalArgs: localConfiguration.additionalArgs ?? {},
+            publishState,
+            repositories: Object.fromEntries(Object.entries(sharedConfiguration.repositories).map<[string, RawRepository]>(([repositoryName, sharedRepository]) => {
+                const localRepository = localConfiguration.repositories[repositoryName] ?? {
+                    versionStates: {}
+                };
+
+                return [repositoryName, {
+                    ...sharedRepository,
+                    ...localRepository,
+                    versionStates: Object.fromEntries(Object.entries(localRepository.versionStates).map<[string, VersionState]>(([version, localVersionState]) => {
+                        const sharedVersionState = sharedRepository.versionStates[version] ?? {
+                            phaseStates: {}
+                        };
+
+                        return [version, {
+                            ...sharedVersionState,
+                            ...localVersionState,
+                            phaseStates: {
+                                ...localVersionState.phaseStates,
+                                ...sharedVersionState.phaseStates
+                            }
+                        }];
+                    }))
+                }];
+            }))
+        });
+    }
+
+    /**
+     * Save the configuration.
+     *
+     * @param isComplete
+     * If true, publication is complete.
+     */
+    async save(isComplete: boolean): Promise<void> {
+        const rawConfiguration = !isComplete ? this.#raw : omit(this.#raw, "publishState");
+
+        const sharedConfiguration: SharedConfiguration = {
+            ...pick(rawConfiguration as SharedConfiguration, "versions", "organization"),
+            repositories: Object.fromEntries(Object.entries(rawConfiguration.repositories as SharedConfiguration["repositories"]).map<[string, SharedRepository]>(([repositoryName, repository]) => [repositoryName, {
+                ...pick(repository, "directory", "dependencyType", "additionalDependencies", "excludePaths"),
+                versionStates: Object.fromEntries(Object.entries(repository.versionStates).map<[string, SharedVersionState]>(([version, versionState]) => [version, {
+                    phaseStates: pick(versionState.phaseStates, "beta", "prod")
+                }]).filter(([_version, versionState]) => Object.keys(versionState).length !== 0))
+            }]))
+        };
+
+        const localConfiguration: LocalConfiguration<TPhase> = {
+            ...pick(rawConfiguration as LocalConfiguration<TPhase>, "alphaRegistry", "logLevel", "additionalArgs", "publishState"),
+            repositories: Object.fromEntries(Object.entries(rawConfiguration.repositories as LocalConfiguration<TPhase>["repositories"]).map<[string, LocalRepository]>(([repositoryName, repository]) => [repositoryName, {
+                versionStates: Object.fromEntries(Object.entries(repository.versionStates).map<[string, LocalVersionState]>(([version, versionState]) => [version, {
+                    phaseStates: pick(versionState.phaseStates, "alpha")
+                }]))
+            }]))
+        };
+
+        if (this.#isDryRun) {
+            this.#logger.debug(`Dry run: Saving shared configuration\n${JSON.stringify(sharedConfiguration, null, 2)}\n`);
+            this.#logger.debug(`Dry run: Saving local configuration\n${JSON.stringify(localConfiguration, null, 2)}\n`);
+        } else {
+            const appDataStorage = new FileAppDataStorage(".");
+
+            await appDataStorage.write(SHARED_CONFIGURATION_KEY, sharedConfiguration, true);
+            await appDataStorage.write(LOCAL_CONFIGURATION_KEY, localConfiguration, true);
+        }
     }
 }

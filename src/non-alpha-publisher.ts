@@ -6,7 +6,8 @@ import { setTimeout } from "node:timers/promises";
 import { Octokit } from "octokit";
 import { parse as yamlParse } from "yaml";
 import secureConfigurationJSON from "../config/publisher.secure.json" with { type: "json" };
-import { NEXT_PHASE, type Phase, PREVIOUS_PHASE, SHARED_CONFIGURATION_PATH } from "./configuration.js";
+import { SHARED_CONFIGURATION_PATH } from "./configuration.js";
+import { NEXT_PHASE, type Phase, PREVIOUS_PHASE } from "./phase.js";
 import { Publisher, RunOptions } from "./publisher.js";
 
 /**
@@ -76,56 +77,34 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
     /**
      * Octokit.
      */
-    readonly #octokit: Octokit;
-
-    /**
-     * Constructor.
-     *
-     * @param phase
-     * Phase, excluding alpha.
-     *
-     * @param dryRun
-     * If true, output what would be run rather than running it.
-     */
-    constructor(phase: Exclude<Phase, "alpha">, dryRun: boolean) {
-        super(phase, dryRun);
-
-        this.#octokit = new Octokit({
-            auth: this.#secureConfiguration.token,
-            userAgent: `${this.configuration.organization} publisher`
-        });
-    }
+    #octokit!: Octokit;
 
     /**
      * @inheritDoc
      */
     protected override dependencyVersionFor(dependencyRepositoryName: string): string {
-        const dependencyRepository = this.configuration.repositories[dependencyRepositoryName];
+        const dependencyType = this.configuration.repositories[dependencyRepositoryName].dependencyType;
 
-        const phaseStateVersion = dependencyRepository.phaseStates[this.phase]?.version;
+        const dependencyVersion = this.getPhaseState(dependencyRepositoryName).version;
 
-        if (phaseStateVersion === undefined) {
-            throw new Error(`*** Internal error *** Version not set for dependency ${dependencyRepositoryName}`);
-        }
+        let dependencyVersionRange: string;
 
-        let dependencyVersion: string;
-
-        switch (dependencyRepository.dependencyType) {
+        switch (dependencyType) {
             case "external":
                 // Lock to version against which package was developed if not in production.
-                dependencyVersion = this.phase !== "prod" ? phaseStateVersion : `^${phaseStateVersion}`;
+                dependencyVersionRange = this.phase !== "prod" ? dependencyVersion : `^${dependencyVersion}`;
                 break;
 
             case "internal":
                 // Tag is the version preceded by 'v'.
-                dependencyVersion = `${this.configuration.organization}/${dependencyRepositoryName}#v${phaseStateVersion}`;
+                dependencyVersionRange = `${this.configuration.organization}/${dependencyRepositoryName}#v${dependencyVersion}`;
                 break;
 
             default:
-                throw new Error(`Invalid dependency type "${(dependencyRepository.dependencyType)}" for dependency ${dependencyRepositoryName}`);
+                throw new Error(`Invalid dependency type "${(dependencyType)}" for dependency ${dependencyRepositoryName}`);
         }
 
-        return dependencyVersion;
+        return dependencyVersionRange;
     }
 
     /**
@@ -139,10 +118,10 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
      * @inheritDoc
      */
     protected override isValidBranch(): boolean {
-        const parsedVersion = this.repositoryPublishState.parsedVersion;
+        const parsedVersion = this.currentPublishState.repository.parsedVersion;
 
         // Branch for non-alpha phase must match version.
-        return this.repositoryPublishState.branch === `v${parsedVersion.majorVersion}.${parsedVersion.minorVersion}`;
+        return this.currentPublishState.branch === `v${parsedVersion.majorVersion}.${parsedVersion.minorVersion}`;
     }
 
     /**
@@ -157,16 +136,18 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
      * Callback to execute step.
      */
     async #runStep(step: Step, stepRunner: () => Promisable<unknown>): Promise<void> {
-        const publishStateStep = this.publishState.step;
+        const publishState = this.configuration.publishState;
+
+        const publishStateStep = publishState.step;
 
         if (publishStateStep === undefined || publishStateStep === step) {
             this.logger.debug(`Running step ${step}`);
 
-            this.publishState.step = step;
+            publishState.step = step;
 
             await stepRunner();
 
-            delete this.publishState.step;
+            delete publishState.step;
         } else {
             this.logger.debug(`Skipping step ${step}`);
         }
@@ -217,17 +198,17 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
      * Validate the workflow by waiting for it to complete.
      */
     async #validateWorkflow(): Promise<void> {
-        if (this.dryRun) {
+        if (this.isDryRun) {
             this.logger.info("Dry run: Validate workflow");
         } else {
-            const commitSHA = this.run(RunOptions.RunAlways, true, false, "git", "rev-parse", this.repositoryPublishState.branch)[0];
+            const commitSHA = this.run(RunOptions.RunAlways, true, false, "git", "rev-parse", this.currentPublishState.branch)[0];
 
             let workflowRunID = -1;
 
             await this.#runJob(async () =>
                 this.#octokit.rest.actions.listWorkflowRunsForRepo({
                     owner: this.configuration.organization,
-                    repo: this.repositoryPublishState.repositoryName,
+                    repo: this.currentPublishState.repository.name,
                     head_sha: commitSHA
                 }).then((response) => {
                     let jobState: JobState = "waiting";
@@ -260,13 +241,26 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
     /**
      * @inheritDoc
      */
+    protected override async initialize(): Promise<void> {
+        await super.initialize();
+
+        this.#octokit = new Octokit({
+            auth: this.#secureConfiguration.token,
+            userAgent: `${this.configuration.organization} publisher`
+        });
+    }
+
+    /**
+     * @inheritDoc
+     */
     protected override async publish(): Promise<void> {
-        const repositoryPublishState = this.repositoryPublishState;
-        const repository = repositoryPublishState.repository;
-        const branch = repositoryPublishState.branch;
-        const parsedVersion = repositoryPublishState.parsedVersion;
+        const currentPublishState = this.currentPublishState;
+        const repository = currentPublishState.repository;
+        const branch = currentPublishState.branch;
+        const parsedVersion = repository.parsedVersion;
 
         const phase = this.phase;
+        const publishState = this.configuration.publishState;
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Non-alpha phases have non-null previous phase.
         const previousPhase = PREVIOUS_PHASE[phase]!;
         const nextPhase = NEXT_PHASE[phase];
@@ -275,14 +269,14 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
         let skip = false;
 
         if (preReleasePhase === previousPhase) {
-            if (this.anyChanges(repository.phaseStates[previousPhase]?.dateTime)) {
+            if (this.anyChanges(repository.versionState.phaseStates[previousPhase]?.dateTime)) {
                 throw new Error(`Repository has changed since last ${previousPhase} published`);
             }
 
             // Production version has no pre-release identifier.
-            const version = this.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, phase !== "prod" ? phase : undefined);
+            const version = repository.updatePackageVersion(parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, phase !== "prod" ? phase : undefined);
 
-            this.updatePhaseState({
+            repository.updatePhaseState({
                 version
             });
 
@@ -295,8 +289,8 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
             }
         } else if (preReleasePhase === phase) {
             // Ignore changes after publication process has started.
-            if (this.publishState.step === undefined) {
-                if (this.anyChanges(repository.phaseStates[phase]?.dateTime)) {
+            if (publishState.step === undefined) {
+                if (this.anyChanges(this.getPhaseDateTime())) {
                     throw new Error(`Repository has changed since last ${phase} published`);
                 }
 
@@ -311,12 +305,12 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
         }
 
         if (!skip) {
-            const packageConfiguration = repositoryPublishState.packageConfiguration;
+            const packageConfiguration = repository.packageConfiguration;
             const version = packageConfiguration.version;
             const tag = `v${version}`;
 
-            if (this.publishState.step !== undefined) {
-                this.logger.debug(`Repository failed at step "${this.publishState.step}" on prior run`);
+            if (publishState.step !== undefined) {
+                this.logger.debug(`Repository failed at step "${publishState.step}" on prior run`);
             }
 
             const workflowsPath = ".github/workflows/";
@@ -373,13 +367,13 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
 
             // Helper repositories don't publish releases.
             if (repository.dependencyType !== "helper") {
-                if (this.dryRun) {
+                if (this.isDryRun) {
                     this.logger.info("Dry run: Create release");
                 } else {
                     await this.#runStep("release", async () =>
                         this.#octokit.rest.repos.createRelease({
                             owner: this.configuration.organization,
-                            repo: repositoryPublishState.repositoryName,
+                            repo: currentPublishState.repository.name,
                             tag_name: tag,
                             name: `Release ${tag}`,
                             prerelease: phase !== "prod"
@@ -397,12 +391,12 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
             // Pull requests apply only to production publication when the next branch is main; version-to-version propagation requires manual rebase.
             if (phase === "prod" && this.getNextBranch() === "main") {
                 await this.#runStep("pull request", async () => {
-                    if (this.dryRun) {
+                    if (this.isDryRun) {
                         this.logger.info(`Dry run: Pull request from ${branch} to main`);
                     } else {
                         await this.#octokit.rest.pulls.create({
                             owner: this.configuration.organization,
-                            repo: repositoryPublishState.repositoryName,
+                            repo: currentPublishState.repository.name,
                             title: `Production version ${version}`,
                             head: branch,
                             base: "main"
@@ -413,7 +407,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
 
             // External repositories need to give the NPM registry time to reindex.
             if (repository.dependencyType === "external") {
-                if (this.dryRun) {
+                if (this.isDryRun) {
                     this.logger.info("Dry run: NPM wait");
                 } else {
                     const packageSpecification = `${packageConfiguration.name}@${phase === "beta" ? "beta" : "latest"}`;
@@ -426,7 +420,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
                 }
             }
 
-            this.updatePhaseState({
+            repository.updatePhaseState({
                 dateTime: new Date()
             });
         }
@@ -438,10 +432,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
     protected override async finalize(): Promise<void> {
         this.commitModified(`Published ${this.phase} release.`, SHARED_CONFIGURATION_PATH);
 
-        const repositoryPublishState = this.repositoryPublishState;
-
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Phase state exists.
-        const version = repositoryPublishState.repository.phaseStates[this.phase]!.version;
+        const version = this.getPhaseState().version;
 
         const tag = `v${version}`;
 
@@ -451,7 +442,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
 
         // Delete remote tag and push latest commit and updated tag to remote.
         this.run(RunOptions.SkipOnDryRun, false, false, "git", "push", "--atomic", "--delete", "origin", tag);
-        this.run(RunOptions.SkipOnDryRun, false, false, "git", "push", "--atomic", "origin", repositoryPublishState.branch, tag);
+        this.run(RunOptions.SkipOnDryRun, false, false, "git", "push", "--atomic", "origin", this.currentPublishState.branch, tag);
 
         await super.finalize();
     }

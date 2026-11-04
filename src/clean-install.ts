@@ -9,7 +9,7 @@ class CleanInstall extends Publisher<undefined> {
      * Constructor.
      *
      * @param dryRun
-     * If true, output what would be run rather than running it.
+     * If true, output what would be produced rather than producing it.
      */
     constructor(dryRun: boolean) {
         super(undefined, dryRun);
@@ -40,16 +40,16 @@ class CleanInstall extends Publisher<undefined> {
      * @inheritDoc
      */
     protected override publish(): void {
-        const repositoryPublishState = this.repositoryPublishState;
+        const repository = this.currentPublishState.repository;
 
         // Configure organization registry based on pre-release identifier.
-        if (repositoryPublishState.parsedVersion.preReleaseIdentifier === "alpha") {
+        if (repository.parsedVersion.preReleaseIdentifier === "alpha") {
             this.setOrganizationAlphaRegistry();
         } else {
             this.unsetOrganizationAlphaRegistry();
         }
 
-        if (repositoryPublishState.repositoryName !== "publisher") {
+        if (repository.name !== "publisher") {
             this.run(RunOptions.SkipOnDryRun, false, false, "npm", "clean-install");
         }
     }
