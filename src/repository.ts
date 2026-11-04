@@ -114,6 +114,11 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
     readonly #raw: RawRepository;
 
     /**
+     * Package name.
+     */
+    readonly #packageName: string;
+
+    /**
      * Package configuration.
      */
     #packageConfiguration!: PackageConfiguration;
@@ -139,6 +144,7 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
         this.#configuration = configuration;
         this.#name = name;
         this.#raw = raw;
+        this.#packageName = `${configuration.atOrganization}/${name}`;
     }
 
     /**
@@ -146,6 +152,13 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
      */
     get name(): string {
         return this.#name;
+    }
+
+    /**
+     * Get the package name.
+     */
+    get packageName(): string {
+        return this.#packageName;
     }
 
     /**
@@ -189,6 +202,10 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
     startPublish(): void {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Package configuration format is known.
         const packageConfiguration = JSON.parse(fs.readFileSync(PACKAGE_CONFIGURATION_PATH).toString()) as PackageConfiguration;
+
+        if (packageConfiguration.name !== this.packageName) {
+            throw new Error(`Package name in package.json (${packageConfiguration.name}) does not match repository package name (${this.packageName})`);
+        }
 
         const parsedVersion = parseVersion(packageConfiguration.version);
 
