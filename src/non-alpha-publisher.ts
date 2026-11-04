@@ -118,10 +118,10 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
      * @inheritDoc
      */
     protected override isValidBranch(): boolean {
-        const parsedVersion = this.currentPublishState.repository.parsedVersion;
+        const parsedVersion = this.repository.parsedVersion;
 
         // Branch for non-alpha phase must match version.
-        return this.currentPublishState.branch === `v${parsedVersion.majorVersion}.${parsedVersion.minorVersion}`;
+        return this.branch === `v${parsedVersion.majorVersion}.${parsedVersion.minorVersion}`;
     }
 
     /**
@@ -201,14 +201,14 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
         if (this.isDryRun) {
             this.logger.info("Dry run: Validate workflow");
         } else {
-            const commitSHA = this.run(RunOptions.RunAlways, true, false, "git", "rev-parse", this.currentPublishState.branch)[0];
+            const commitSHA = this.run(RunOptions.RunAlways, true, false, "git", "rev-parse", this.branch)[0];
 
             let workflowRunID = -1;
 
             await this.#runJob(async () =>
                 this.#octokit.rest.actions.listWorkflowRunsForRepo({
                     owner: this.configuration.organization,
-                    repo: this.currentPublishState.repository.name,
+                    repo: this.repository.name,
                     head_sha: commitSHA
                 }).then((response) => {
                     let jobState: JobState = "waiting";
@@ -254,9 +254,8 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
      * @inheritDoc
      */
     protected override async publish(): Promise<void> {
-        const currentPublishState = this.currentPublishState;
-        const repository = currentPublishState.repository;
-        const branch = currentPublishState.branch;
+        const repository = this.repository;
+        const branch = this.branch;
         const parsedVersion = repository.parsedVersion;
 
         const phase = this.phase;
@@ -369,7 +368,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
                     await this.#runStep("release", async () =>
                         this.#octokit.rest.repos.createRelease({
                             owner: this.configuration.organization,
-                            repo: currentPublishState.repository.name,
+                            repo: this.repository.name,
                             tag_name: tag,
                             name: `Release ${tag}`,
                             prerelease: phase !== "prod"
@@ -392,7 +391,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
                     } else {
                         await this.#octokit.rest.pulls.create({
                             owner: this.configuration.organization,
-                            repo: currentPublishState.repository.name,
+                            repo: this.repository.name,
                             title: `Production version ${version}`,
                             head: branch,
                             base: "main"
@@ -436,7 +435,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
 
         // Delete remote tag and push latest commit and updated tag to remote.
         this.run(RunOptions.SkipOnDryRun, false, false, "git", "push", "--atomic", "--delete", "origin", tag);
-        this.run(RunOptions.SkipOnDryRun, false, false, "git", "push", "--atomic", "origin", this.currentPublishState.branch, tag);
+        this.run(RunOptions.SkipOnDryRun, false, false, "git", "push", "--atomic", "origin", this.branch, tag);
 
         await super.finalize();
     }

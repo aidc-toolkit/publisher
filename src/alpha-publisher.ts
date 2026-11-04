@@ -57,7 +57,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
      * @inheritDoc
      */
     protected override isValidRepositoryChange(): boolean {
-        const phaseStates = this.currentPublishState.repository.versionState.phaseStates;
+        const phaseStates = this.repository.versionState.phaseStates;
 
         const alphaDateTime = phaseStates.alpha?.dateTime;
         const prodDateTime = phaseStates.prod?.dateTime;
@@ -204,8 +204,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
      * @inheritDoc
      */
     protected override async publish(): Promise<void> {
-        const currentPublishState = this.currentPublishState;
-        const repository = currentPublishState.repository;
+        const repository = this.repository;
         const packageConfiguration = repository.packageConfiguration;
         const workingVersion = this.getRepositoryPublishState().workingVersion;
 
@@ -270,7 +269,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
                                 if (updateVersion !== undefined) {
                                     dependencies[dependencyPackageName] = updateVersion;
 
-                                    currentPublishState.savePackageConfigurationPending = true;
+                                    this.savePackageConfigurationPending = true;
                                 }
                             }
                         }
@@ -279,12 +278,12 @@ class AlphaPublisher extends Publisher<"alpha"> {
             }
         }
 
-        if (currentPublishState.savePackageConfigurationPending) {
+        if (this.savePackageConfigurationPending) {
             this.savePackageConfiguration();
         }
 
         // Nothing to do if there are no changes and dependencies haven't been updated.
-        if (this.anyChanges(this.getPhaseDateTime()) || currentPublishState.anyDependenciesUpdated) {
+        if (this.anyChanges(this.getPhaseDateTime()) || this.anyDependenciesUpdated) {
             let parsedVersion = repository.parsedVersion;
 
             const switchToAlpha = parsedVersion.preReleaseIdentifier !== "alpha";

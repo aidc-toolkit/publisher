@@ -40,7 +40,7 @@ class CleanInstall extends Publisher<undefined> {
      * @inheritDoc
      */
     protected override publish(): void {
-        const repository = this.currentPublishState.repository;
+        const repository = this.repository;
 
         // Configure organization registry based on pre-release identifier.
         if (repository.parsedVersion.preReleaseIdentifier === "alpha") {
