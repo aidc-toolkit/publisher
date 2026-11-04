@@ -1,3 +1,3 @@
-import { esLintConfigAIDCToolkit } from "@aidc-toolkit/dev";
+import { esLintDefineAIDCToolkitConfig } from "@aidc-toolkit/dev";
 
-export default esLintConfigAIDCToolkit;
+export default esLintDefineAIDCToolkitConfig();
