@@ -123,7 +123,7 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
     /**
      * Raw configuration.
      */
-    readonly #raw: RawConfiguration<TPhase> & { publishState: PublishState<TPhase> };
+    readonly #raw: RawConfiguration<TPhase> & Required<Pick<RawConfiguration<TPhase>, "publishState">>;
 
     /**
      * Repositories.
@@ -160,7 +160,7 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
      * @param raw
      * Raw configuration.
      */
-    private constructor(phase: TPhase, logger: Logger<object>, isDryRun: boolean, raw: RawConfiguration<TPhase> & { publishState: PublishState<TPhase> }) {
+    private constructor(phase: TPhase, logger: Logger<object>, isDryRun: boolean, raw: RawConfiguration<TPhase> & Required<Pick<RawConfiguration<TPhase>, "publishState">>) {
         this.#phase = phase;
         this.#logger = logger;
         this.#isDryRun = isDryRun;
