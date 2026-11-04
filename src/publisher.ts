@@ -10,7 +10,7 @@ import i18next from "i18next";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as process from "node:process";
-import readline from "node:readline";
+import readlinePromises from "node:readline/promises";
 import type { Logger } from "tslog";
 import { Configuration } from "./configuration.js";
 import type { Phase, PhaseState } from "./phase.js";
@@ -339,39 +339,29 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
      * Answer.
      */
     protected async ask(question: string, validAnswers?: string[]): Promise<string> {
-        using readlineInterface = readline.createInterface({
+        using readlineInterface = readlinePromises.createInterface({
             input: process.stdin,
             output: process.stdout
         });
 
-        /**
-         * Ask the question until the answer is valid.
-         *
-         * @returns
-         * Answer.
-         */
-        async function askUntilValid(): Promise<string> {
-            // eslint-disable-next-line promise/avoid-new -- Method doesn't meet promisify callback requirements.
-            return new Promise((resolve) => {
-                readlineInterface.question(question, (providedAnswer) => {
-                    let answer;
+        let answer;
 
-                    if (validAnswers !== undefined && validAnswers.length !== 0) {
-                        if (providedAnswer === "") {
-                            answer = validAnswers[0];
-                        } else if (validAnswers.includes(providedAnswer)) {
-                            answer = providedAnswer;
-                        }
-                    } else {
-                        answer = providedAnswer;
-                    }
+        // Ask the question until the answer is valid.
+        do {
+            // eslint-disable-next-line no-await-in-loop -- Can't proceed without getting an answer.
+            answer = await readlineInterface.question(question);
 
-                    resolve(answer ?? askUntilValid());
-                });
-            });
-        }
+            if (validAnswers !== undefined && validAnswers.length !== 0) {
+                if (answer === "") {
+                    // Take first valid answer as default.
+                    answer = validAnswers[0];
+                } else if (!validAnswers.includes(answer)) {
+                    answer = undefined;
+                }
+            }
+        } while (answer === undefined);
 
-        return await askUntilValid();
+        return answer;
     }
 
     /**
