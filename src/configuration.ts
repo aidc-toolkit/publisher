@@ -121,11 +121,6 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
     readonly #raw: RawConfiguration<TPhase> & Required<Pick<RawConfiguration<TPhase>, "publishState">>;
 
     /**
-     * Repositories.
-     */
-    readonly #repositories: Readonly<Record<string, Repository<TPhase>>>;
-
-    /**
      * Latest version.
      */
     readonly #latestVersion: string;
@@ -139,6 +134,11 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
      * At organization registry parameter.
      */
     readonly #atOrganizationRegistryParameter: string;
+
+    /**
+     * Repositories.
+     */
+    readonly #repositories: Readonly<Record<string, Repository<TPhase>>>;
 
     /**
      * Constructor.
@@ -157,16 +157,16 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
         this.#isDryRun = isDryRun;
         this.#raw = raw;
 
-        this.#repositories = Object.fromEntries(Object.entries(raw.repositories).map(([name, rawRepository]) =>
-            [name, new Repository(this, name, rawRepository)]
-        ));
-
         this.#latestVersion = raw.versions[raw.versions.length - 1];
 
         const atOrganization = `@${raw.organization}`;
 
         this.#atOrganization = atOrganization;
         this.#atOrganizationRegistryParameter = `${atOrganization}:registry`;
+
+        this.#repositories = Object.fromEntries(Object.entries(raw.repositories).map(([name, rawRepository]) =>
+            [name, new Repository(this, name, rawRepository)]
+        ));
     }
 
     /**
@@ -239,13 +239,6 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
     }
 
     /**
-     * Get the repositories.
-     */
-    get repositories(): Readonly<Record<string, Repository<TPhase>>> {
-        return this.#repositories;
-    }
-
-    /**
      * Get the latest version.
      */
     get latestVersion(): string {
@@ -264,6 +257,13 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
      */
     get atOrganizationRegistryParameter(): string {
         return this.#atOrganizationRegistryParameter;
+    }
+
+    /**
+     * Get the repositories.
+     */
+    get repositories(): Readonly<Record<string, Repository<TPhase>>> {
+        return this.#repositories;
     }
 
     /**
