@@ -29,15 +29,15 @@ class AlphaPublisher extends Publisher<"alpha"> {
      * @param updateAll
      * If true, update all dependencies automatically.
      *
-     * @param dryRun
+     * @param isDryRun
      * If true, output what would be produced rather than producing it.
      */
-    constructor(fast: boolean, updateAll: boolean, dryRun: boolean) {
+    constructor(fast: boolean, updateAll: boolean, isDryRun: boolean) {
         if (fast && updateAll) {
             throw new Error("Cannot specify both --fast and --update-all");
         }
 
-        super("alpha", dryRun);
+        super("alpha", isDryRun);
 
         this.#fast = fast;
         this.#updateAll = updateAll;

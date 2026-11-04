@@ -8,11 +8,11 @@ class CleanInstall extends Publisher<undefined> {
     /**
      * Constructor.
      *
-     * @param dryRun
+     * @param isDryRun
      * If true, output what would be produced rather than producing it.
      */
-    constructor(dryRun: boolean) {
-        super(undefined, dryRun);
+    constructor(isDryRun: boolean) {
+        super(undefined, isDryRun);
     }
 
     /**
