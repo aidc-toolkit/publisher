@@ -106,11 +106,6 @@ interface RawConfiguration<TPhase extends Phase | undefined> extends SharedConfi
  */
 export class Configuration<TPhase extends Phase | undefined> implements Required<RawConfiguration<TPhase>> {
     /**
-     * Phase.
-     */
-    readonly #phase: TPhase;
-
-    /**
      * Logger.
      */
     readonly #logger: Logger<object>;
@@ -148,9 +143,6 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
     /**
      * Constructor.
      *
-     * @param phase
-     * Phase.
-     *
      * @param logger
      * Logger.
      *
@@ -160,8 +152,7 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
      * @param raw
      * Raw configuration.
      */
-    private constructor(phase: TPhase, logger: Logger<object>, isDryRun: boolean, raw: RawConfiguration<TPhase> & Required<Pick<RawConfiguration<TPhase>, "publishState">>) {
-        this.#phase = phase;
+    private constructor(logger: Logger<object>, isDryRun: boolean, raw: RawConfiguration<TPhase> & Required<Pick<RawConfiguration<TPhase>, "publishState">>) {
         this.#logger = logger;
         this.#isDryRun = isDryRun;
         this.#raw = raw;
@@ -176,13 +167,6 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
 
         this.#atOrganization = atOrganization;
         this.#atOrganizationRegistryParameter = `${atOrganization}:registry`;
-    }
-
-    /**
-     * Get the phase.
-     */
-    get phase(): TPhase {
-        return this.#phase;
     }
 
     /**
@@ -335,7 +319,7 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
         }
 
         // Merge shared and local configurations.
-        return new Configuration(phase, logger, isDryRun, {
+        return new Configuration(logger, isDryRun, {
             ...sharedConfiguration,
             ...localConfiguration,
             logLevel,

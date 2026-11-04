@@ -195,12 +195,14 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
         this.#packageConfiguration = packageConfiguration;
         this.#parsedVersion = parsedVersion;
 
-        this.#configuration.publishState.repositoryPublishStates[this.name] = {
+        const publishState = this.#configuration.publishState;
+
+        publishState.repositoryPublishStates[this.name] = {
             workingVersion: `${parsedVersion.majorVersion}.${parsedVersion.minorVersion}`,
             dependencyPackageNames: []
         };
 
-        const phase = this.#configuration.phase;
+        const phase = publishState.phase;
 
         if (phase !== undefined) {
             const versionState = this.versionState;
@@ -358,7 +360,7 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
      * @returns
      * Phase state.
      */
-    getPhaseState<IsRequired extends boolean>(isRequired: IsRequired, phase = this.#configuration.phase): IsRequired extends true ? PhaseState : PhaseState | undefined {
+    getPhaseState<IsRequired extends boolean>(isRequired: IsRequired, phase = this.#configuration.publishState.phase): IsRequired extends true ? PhaseState : PhaseState | undefined {
         const phaseState = phase !== undefined ? this.versionState.phaseStates[phase] : undefined;
 
         if (isRequired && phaseState === undefined) {
@@ -379,7 +381,7 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
      * Phase date/time or undefined if phase never before published.
      */
     getPhaseDateTime<IsRequired extends boolean>(isRequired: IsRequired): IsRequired extends true ? Date : Date | undefined {
-        let phase: Phase | null | undefined = this.#configuration.phase;
+        let phase: Phase | null | undefined = this.#configuration.publishState.phase;
 
         if (phase === undefined) {
             throw new Error("Phase must be defined to get phase date/time");
@@ -414,7 +416,9 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
      * Partial phases state. Only those properties provided will be updated.
      */
     updatePhaseState(phaseState: Partial<PhaseState>): void {
-        if (this.#configuration.phase === undefined) {
+        const phase = this.#configuration.publishState.phase;
+
+        if (phase === undefined) {
             throw new Error("Attempting to update phase state for undefined phase");
         }
 
@@ -427,7 +431,7 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
             } :
             {};
 
-        this.versionState.phaseStates[this.#configuration.phase] = {
+        this.versionState.phaseStates[phase] = {
             ...previousPhaseState,
             ...phaseState,
             ...phaseStateDateTime
