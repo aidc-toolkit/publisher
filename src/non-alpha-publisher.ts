@@ -356,7 +356,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
             });
 
             await this.#runStep("push", () => {
-                this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "push", "--atomic", "origin", branch, tag);
+                this.run(RunOptions.SkipOnDryRun, false, false, "git", "push", "--atomic", "origin", branch, tag);
             });
 
             if (hasPushWorkflow) {

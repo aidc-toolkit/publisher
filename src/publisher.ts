@@ -13,7 +13,7 @@ import readline from "node:readline";
 import type { Logger } from "tslog";
 import { Configuration } from "./configuration.js";
 import type { Phase, PhaseState } from "./phase.js";
-import { Repository, RepositoryPublishState } from "./repository.js";
+import type { Repository, RepositoryPublishState } from "./repository.js";
 
 /**
  * Current publish state, derived from package configuration and updated during publishing.
@@ -616,7 +616,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
         }
 
         if (modifiedFiles.length !== 0) {
-            this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "commit", ...modifiedFiles, "--message", message);
+            this.run(RunOptions.SkipOnDryRun, false, false, "git", "commit", ...modifiedFiles, "--message", message);
         }
     }
 
