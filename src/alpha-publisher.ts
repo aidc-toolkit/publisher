@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as process from "node:process";
 import { Publisher, RunOptions } from "./publisher.js";
+import type { Repository } from "./repository.js";
 
 /**
  * Alpha release publisher.
@@ -46,8 +47,9 @@ class AlphaPublisher extends Publisher<"alpha"> {
     /**
      * @inheritDoc
      */
-    protected override dependencyVersionFor(dependencyRepositoryName: string): string {
-        const dependencyVersion = this.getPhaseState(dependencyRepositoryName).version;
+    protected override getDependencyVersion(dependencyRepository: Repository<"alpha">): string {
+        // Dependency version must be from the same working version publication.
+        const dependencyVersion = dependencyRepository.getPhaseState(this.repository.workingVersion).version;
 
         // Compatible version syntax will detect updates.
         return `^${dependencyVersion.substring(0, dependencyVersion.lastIndexOf("."))}`;
@@ -57,7 +59,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
      * @inheritDoc
      */
     protected override isValidRepositoryChange(): boolean {
-        const phaseStates = this.repository.versionState.phaseStates;
+        const phaseStates = this.repository.workingVersionState.phaseStates;
 
         const alphaDateTime = phaseStates.alpha?.dateTime;
         const prodDateTime = phaseStates.prod?.dateTime;
@@ -206,7 +208,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
     protected override async publish(): Promise<void> {
         const repository = this.repository;
         const packageConfiguration = repository.packageConfiguration;
-        const workingVersion = this.getRepositoryPublishState().workingVersion;
+        const workingVersion = repository.workingVersion;
 
         // Check for external updates, even if there are no changes, if not in fast mode and working on the latest version.
         if (!this.#fast && workingVersion === this.configuration.latestVersion) {
@@ -285,7 +287,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
         }
 
         // Nothing to do if there are no changes and dependencies haven't been updated.
-        if (this.anyChanges(this.getPhaseDateTime()) || repository.anyDependenciesUpdated) {
+        if (this.anyChanges(repository.getEffectivePhaseDateTime(false)) || repository.anyDependenciesUpdated) {
             let parsedVersion = repository.parsedVersion;
 
             const switchToAlpha = parsedVersion.preReleaseIdentifier !== "alpha";

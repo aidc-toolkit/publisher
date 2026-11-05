@@ -6,8 +6,8 @@ import * as process from "node:process";
 import * as readlinePromises from "node:readline/promises";
 import type { Logger } from "tslog";
 import { Configuration } from "./configuration.js";
-import type { Phase, PhaseState } from "./phase.js";
-import type { Repository, RepositoryPublishState } from "./repository.js";
+import type { Phase } from "./phase.js";
+import type { Repository } from "./repository.js";
 
 /**
  * Run options.
@@ -138,46 +138,6 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     }
 
     /**
-     * Get the repository publish state for a repository; create it if undefined.
-     *
-     * @param repositoryName
-     * Repository name.
-     *
-     * @returns
-     * Repository publish state.
-     */
-    protected getRepositoryPublishState(repositoryName = this.repository.name): RepositoryPublishState {
-        return this.configuration.repositories[repositoryName].repositoryPublishState;
-    }
-
-    /**
-     * Get the phase state for a repository.
-     *
-     * @param repositoryName
-     * Repository name.
-     *
-     * @returns
-     * Phase state.
-     */
-    protected getPhaseState(repositoryName = this.repository.name): PhaseState {
-        return this.configuration.repositories[repositoryName].getPhaseState(true);
-    }
-
-    /**
-     * Get the phase date/time for a repository.
-     *
-     * @param repositoryName
-     * Repository name. If undefined, the return value may be undefined.
-     *
-     * @returns
-     * Phase date/time or undefined if phase never before published.
-     */
-    protected getPhaseDateTime<TRepositoryName extends string | undefined>(repositoryName?: TRepositoryName): TRepositoryName extends string ? Date : Date | undefined {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Type is determined by repository name.
-        return this.configuration.repositories[repositoryName ?? this.repository.name].getPhaseDateTime(repositoryName !== undefined) as TRepositoryName extends string ? Date : Date | undefined;
-    }
-
-    /**
      * Set the alpha registry for the organization.
      */
     protected setOrganizationAlphaRegistry(): void {
@@ -194,13 +154,13 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     /**
      * Get the dependency version for a dependency repository.
      *
-     * @param dependencyRepositoryName
-     * Dependency repository name.
+     * @param dependencyRepository
+     * Dependency repository.
      *
      * @returns
      * Dependency version.
      */
-    protected abstract dependencyVersionFor(dependencyRepositoryName: string): string;
+    protected abstract getDependencyVersion(dependencyRepository: Repository<TPhase>): string;
 
     /**
      * Determine if repository change is valid for the phase.
@@ -573,7 +533,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
 
             const configuration = this.configuration;
 
-            const dependencyVersionFor = this.dependencyVersionFor.bind(this);
+            const getDependencyVersion = this.getDependencyVersion.bind(this);
 
             const startDirectory = process.cwd();
 
@@ -606,7 +566,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
 
                             repository.alignWithBranch(branch);
 
-                            const updateDependencyPackageNamesSet = this.repository.updateOrganizationDependencies(dependencyVersionFor);
+                            const updateDependencyPackageNamesSet = this.repository.updateOrganizationDependencies(getDependencyVersion);
 
                             if (updateDependencyPackageNamesSet.size !== 0) {
                                 // Run "npm update" to force update of repository packages whose configured version didn't change.

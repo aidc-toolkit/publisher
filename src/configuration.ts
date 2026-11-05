@@ -5,7 +5,6 @@ import {
     type LocalRepository,
     type RawRepository,
     Repository,
-    type RepositoryPublishState,
     type SharedRepository
 } from "./repository.js";
 import type { LocalVersionState, SharedVersionState, VersionState } from "./version-state.js";
@@ -44,11 +43,6 @@ export interface PublishState<TPhase extends Phase | undefined> {
      * Current phase in publication or undefined if not publishing.
      */
     readonly phase: TPhase;
-
-    /**
-     * Repository publish states.
-     */
-    readonly repositoryPublishStates: Record<string, RepositoryPublishState>;
 
     /**
      * Current repository name in publication.
@@ -326,8 +320,7 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
 
         if (publishState === undefined) {
             publishState = {
-                phase,
-                repositoryPublishStates: {}
+                phase
             };
         } else if (publishState.phase !== phase) {
             throw new Error(`Previous publication phase ${publishState.phase} not completed`);
@@ -350,6 +343,11 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
                     ...localRepository,
                     versionStates: Object.fromEntries(sharedConfiguration.versions.map<[string, VersionState]>((version) => {
                         const sharedVersionState = sharedRepository.versionStates[version] ?? {
+                            dependencyPackageNames: [],
+                            phaseStates: {}
+                        };
+
+                        const localVersionState = localRepository.versionStates[version] ?? {
                             phaseStates: {}
                         };
 
@@ -385,6 +383,7 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
             repositories: Object.fromEntries(Object.entries(rawConfiguration.repositories as SharedConfiguration["repositories"]).map<[string, SharedRepository]>(([repositoryName, repository]) => [repositoryName, {
                 ...pick(repository, "directory", "dependencyType", "additionalDependencies", "excludePaths"),
                 versionStates: Object.fromEntries(Object.entries(repository.versionStates).map<[string, SharedVersionState]>(([version, versionState]) => [version, {
+                    ...pick(versionState, "dependencyPackageNames"),
                     phaseStates: pick(versionState.phaseStates, "beta", "prod")
                 }]).filter(([_version, versionState]) => Object.keys(versionState.phaseStates).length !== 0))
             }]))

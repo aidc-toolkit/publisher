@@ -9,6 +9,7 @@ import secureConfigurationJSON from "../config/publisher.secure.json" with { typ
 import { SHARED_CONFIGURATION_PATH } from "./configuration.js";
 import { NEXT_PHASE, type Phase, PREVIOUS_PHASE } from "./phase.js";
 import { Publisher, RunOptions } from "./publisher.js";
+import type { Repository } from "./repository.js";
 
 /**
  * Configuration layout of publisher.secure.json.
@@ -82,14 +83,13 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
     /**
      * @inheritDoc
      */
-    protected override dependencyVersionFor(dependencyRepositoryName: string): string {
-        const dependencyType = this.configuration.repositories[dependencyRepositoryName].dependencyType;
-
-        const dependencyVersion = this.getPhaseState(dependencyRepositoryName).version;
+    protected override getDependencyVersion(dependencyRepository: Repository<Exclude<Phase, "alpha">>): string {
+        // Dependency version must be from the same working version publication.
+        const dependencyVersion = dependencyRepository.getPhaseState(this.repository.workingVersion).version;
 
         let dependencyVersionRange: string;
 
-        switch (dependencyType) {
+        switch (dependencyRepository.dependencyType) {
             case "external":
                 // Lock to version against which package was developed if not in production.
                 dependencyVersionRange = this.phase !== "prod" ? dependencyVersion : `^${dependencyVersion}`;
@@ -97,11 +97,11 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
 
             case "internal":
                 // Tag is the version preceded by 'v'.
-                dependencyVersionRange = `${this.configuration.organization}/${dependencyRepositoryName}#v${dependencyVersion}`;
+                dependencyVersionRange = `${this.configuration.organization}/${dependencyRepository.name}#v${dependencyVersion}`;
                 break;
 
             default:
-                throw new Error(`Invalid dependency type "${(dependencyType)}" for dependency ${dependencyRepositoryName}`);
+                throw new Error(`Invalid dependency type "${(dependencyRepository.dependencyType)}" for dependency ${dependencyRepository.name}`);
         }
 
         return dependencyVersionRange;
@@ -268,7 +268,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
         let skip = false;
 
         if (preReleasePhase === previousPhase) {
-            if (this.anyChanges(repository.versionState.phaseStates[previousPhase]?.dateTime)) {
+            if (this.anyChanges(repository.workingVersionState.phaseStates[previousPhase]?.dateTime)) {
                 throw new Error(`Repository has changed since last ${previousPhase} published`);
             }
 
@@ -285,7 +285,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
         } else if (preReleasePhase === phase) {
             // Ignore changes after publication process has started.
             if (publishState.step === undefined) {
-                if (this.anyChanges(this.getPhaseDateTime())) {
+                if (this.anyChanges(repository.getEffectivePhaseDateTime(false))) {
                     throw new Error(`Repository has changed since last ${phase} published`);
                 }
 
@@ -425,9 +425,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
     protected override async finalize(): Promise<void> {
         this.commitModified(`Published ${this.phase} release.`, SHARED_CONFIGURATION_PATH);
 
-        const version = this.getPhaseState().version;
-
-        const tag = `v${version}`;
+        const tag = `v${(this.repository.getPhaseState().version)}`;
 
         // Move local tag to latest commit.
         this.run(RunOptions.SkipOnDryRun, false, false, "git", "tag", "--delete", tag);

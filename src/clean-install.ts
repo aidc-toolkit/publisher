@@ -18,7 +18,7 @@ class CleanInstall extends Publisher<undefined> {
     /**
      * @inheritDoc
      */
-    protected override dependencyVersionFor(): string {
+    protected override getDependencyVersion(): string {
         return "";
     }
 

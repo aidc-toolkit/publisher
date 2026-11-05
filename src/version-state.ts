@@ -5,6 +5,11 @@ import type { Phase, PhaseState } from "./phase.js";
  */
 export interface SharedVersionState {
     /**
+     * Organization dependency package names included in package configuration.
+     */
+    readonly dependencyPackageNames: string[];
+
+    /**
      * Beta and production phase states.
      */
     readonly phaseStates: Readonly<Partial<Record<"beta" | "prod", PhaseState>>>;

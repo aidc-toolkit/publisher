@@ -80,21 +80,6 @@ export interface RawRepository extends SharedRepository, LocalRepository {
 }
 
 /**
- * Repository publish state.
- */
-export interface RepositoryPublishState {
-    /**
-     * Working version.
-     */
-    workingVersion: string;
-
-    /**
-     * Organization dependency package names included in package configuration.
-     */
-    dependencyPackageNames: string[];
-}
-
-/**
  * Repository.
  */
 export class Repository<TPhase extends Phase | undefined> implements RawRepository {
@@ -127,6 +112,11 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
      * Parsed version.
      */
     #parsedVersion!: ParsedVersion;
+
+    /**
+     * Working version.
+     */
+    #workingVersion!: string;
 
     /**
      * True if any dependencies, including additional, have been updated.
@@ -195,10 +185,10 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
     }
 
     /**
-     * Get additional arguments for externally run commands.
+     * Get the version states.
      */
-    get versionStates(): never {
-        throw new Error("Direct access to version states forbidden");
+    get versionStates(): Record<string, VersionState> {
+        return this.#raw.versionStates;
     }
 
     /**
@@ -216,6 +206,42 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
     }
 
     /**
+     * Get the working version.
+     */
+    get workingVersion(): string {
+        return this.#workingVersion;
+    }
+
+    /**
+     * Set the working version.
+     *
+     * @param majorVersion
+     * Major version.
+     *
+     * @param minorVersion
+     * Minor version.
+     */
+    #updateWorkingVersion(majorVersion: number, minorVersion: number): void {
+        this.#workingVersion = `${majorVersion}.${minorVersion}`;
+
+        const phase = this.#configuration.publishState.phase;
+
+        if (phase !== undefined) {
+            // Create phase state if necessary; default phase state will be replaced almost immediately.
+            this.versionStates[this.#workingVersion].phaseStates[phase] ??= {
+                version: "0.0.0"
+            };
+        }
+    }
+
+    /**
+     * Get the version state for the working version.
+     */
+    get workingVersionState(): VersionState {
+        return this.versionStates[this.workingVersion];
+    }
+
+    /**
      * Determine if any dependencies, including additional, have been updated.
      */
     get anyDependenciesUpdated(): boolean {
@@ -223,79 +249,48 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
     }
 
     /**
-     * Get the repository publish state.
-     */
-    get repositoryPublishState(): RepositoryPublishState {
-        return this.#configuration.publishState.repositoryPublishStates[this.name];
-    }
-
-    /**
-     * Get the working version.
-     */
-    get workingVersion(): string {
-        return this.repositoryPublishState.workingVersion;
-    }
-
-    /**
-     * Get the version state.
-     */
-    get versionState(): VersionState {
-        const workingVersion = this.workingVersion;
-
-        let versionState = this.#raw.versionStates[workingVersion] as VersionState | undefined;
-
-        // Set the version state if undefined.
-        if (versionState === undefined) {
-            versionState = {
-                phaseStates: {}
-            };
-
-            this.#raw.versionStates[workingVersion] = versionState;
-        }
-
-        return versionState;
-    }
-
-    /**
      * Get a phase state.
      *
-     * @param isRequired
      * True if phase state is required.
      *
-     * @param phase
-     * Phase.
+     * @param version
+     * Version.
      *
      * @returns
      * Phase state.
      */
-    getPhaseState<IsRequired extends boolean>(isRequired: IsRequired, phase = this.#configuration.publishState.phase): IsRequired extends true ? PhaseState : PhaseState | undefined {
-        const phaseState = phase !== undefined ? this.versionState.phaseStates[phase] : undefined;
+    getPhaseState(version: string = this.workingVersion): PhaseState {
+        const phase = this.#configuration.publishState.phase;
+        const phaseState = phase !== undefined ? this.versionStates[version].phaseStates[phase] : undefined;
 
-        if (isRequired && phaseState === undefined) {
-            throw new Error(`Phase state for phase ${phase} is required but undefined.`);
+        if (phaseState === undefined) {
+            throw new Error(`Phase state for phase ${phase} is undefined.`);
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Type is determined above.
-        return phaseState as IsRequired extends true ? PhaseState : PhaseState | undefined;
+        return phaseState;
     }
 
     /**
-     * Get a phase date/time.
+     * Get the effective phase date/time. The effective phase date/time is the latest date/time of the current phase and
+     * all subsequent phases.
      *
      * @param isRequired
      * True if phase date/time is required.
      *
+     * @param version
+     * Version.
+     *
      * @returns
      * Phase date/time or undefined if phase never before published.
      */
-    getPhaseDateTime<IsRequired extends boolean>(isRequired: IsRequired): IsRequired extends true ? Date : Date | undefined {
+    getEffectivePhaseDateTime<IsRequired extends boolean>(isRequired: IsRequired, version = this.workingVersion): IsRequired extends true ? Date : Date | undefined {
         let phase: Phase | null | undefined = this.#configuration.publishState.phase;
 
         if (phase === undefined) {
             throw new Error("Phase must be defined to get phase date/time");
         }
 
-        const versionState = this.versionState;
+        const versionState = this.versionStates[version];
 
         let phaseDateTime;
 
@@ -323,7 +318,7 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
         const now = new Date();
 
         // Git resolution is one second so round up to next second to ensure that comparisons work as expected.
-        this.getPhaseState(true).dateTime = new Date(now.getTime() - now.getMilliseconds() + 1000);
+        this.getPhaseState().dateTime = new Date(now.getTime() - now.getMilliseconds() + 1000);
     }
 
     /**
@@ -341,31 +336,7 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
 
         this.#packageConfiguration = packageConfiguration;
         this.#parsedVersion = parsedVersion;
-
-        const publishState = this.#configuration.publishState;
-
-        publishState.repositoryPublishStates[this.name] = {
-            workingVersion: `${parsedVersion.majorVersion}.${parsedVersion.minorVersion}`,
-            dependencyPackageNames: []
-        };
-
-        const phase = publishState.phase;
-
-        if (phase !== undefined) {
-            const versionState = this.versionState;
-
-            let phaseState = versionState.phaseStates[phase];
-
-            // Create phase state if necessary.
-            if (phaseState === undefined) {
-                // Default phase state will be replaced almost immediately.
-                phaseState = {
-                    version: "0.0.0"
-                };
-
-                versionState.phaseStates[phase] = phaseState;
-            }
-        }
+        this.#updateWorkingVersion(parsedVersion.majorVersion, parsedVersion.minorVersion);
     }
 
     /**
@@ -411,7 +382,7 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
             preReleaseDateTime
         };
 
-        if (previousParsedVersion.majorVersion !== majorVersion || previousParsedVersion.minorVersion !== minorVersion || previousParsedVersion.patchVersion !== patchVersion || previousParsedVersion.preReleaseIdentifier !== preReleaseIdentifier) {
+        if (majorVersion !== previousParsedVersion.majorVersion || minorVersion !== previousParsedVersion.minorVersion || patchVersion !== previousParsedVersion.patchVersion || preReleaseIdentifier !== previousParsedVersion.preReleaseIdentifier) {
             // Base version has changed; regenerate source version file if not a helper repository.
             if (this.dependencyType !== "helper") {
                 if (this.#configuration.isDryRun) {
@@ -427,17 +398,14 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
                 }
             }
 
-            if (previousParsedVersion.majorVersion !== majorVersion || previousParsedVersion.minorVersion !== minorVersion) {
-                // Working version has changed; create new repository publish state.
-                this.#configuration.publishState.repositoryPublishStates[this.name] = {
-                    workingVersion: `${majorVersion}.${minorVersion}`,
-                    dependencyPackageNames: []
-                };
+            // If working version has changed; update it.
+            if (majorVersion !== previousParsedVersion.majorVersion || minorVersion !== previousParsedVersion.minorVersion) {
+                this.#updateWorkingVersion(majorVersion, minorVersion);
             }
         }
 
         if (propagateToPhaseState) {
-            this.getPhaseState(true).version = version;
+            this.getPhaseState().version = version;
         }
 
         return version;
@@ -509,20 +477,21 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
      * True if organization dependency has been updated.
      */
     #isOrganizationDependencyUpdated(phaseDateTime: Date | undefined, dependencyRepositoryName: string): boolean {
-        return phaseDateTime === undefined || phaseDateTime.getTime() < this.#configuration.repositories[dependencyRepositoryName].getPhaseDateTime(true).getTime();
+        return phaseDateTime === undefined || phaseDateTime.getTime() < this.#configuration.repositories[dependencyRepositoryName].getEffectivePhaseDateTime(true).getTime();
     }
 
     /**
      * Update package configuration if any organization dependencies have been updated.
      *
-     * @param dependencyVersionFor
-     * Callback to determine the version to use for the dependency repository.
+     * @param getDependencyVersion
+     * Callback to get the version to use for the dependency repository.
      *
      * @returns
      * Set of organization dependency package names that were not updated but should be subjected to "npm update".
      */
-    updateOrganizationDependencies(dependencyVersionFor: (dependencyRepositoryName: string) => string): Set<string> {
+    updateOrganizationDependencies(getDependencyVersion: (dependencyRepository: Repository<TPhase>) => string): Set<string> {
         const updateDependencyPackageNamesSet = new Set<string>();
+        const addToUpdateDependencyPackageNamesSet = updateDependencyPackageNamesSet.add.bind(updateDependencyPackageNamesSet) as (value: string) => void;
 
         const configuration = this.#configuration;
         const phase = configuration.publishState.phase;
@@ -531,9 +500,12 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
             const logger = configuration.logger;
             const packageConfiguration = this.packageConfiguration;
             const parsedVersion = this.parsedVersion;
-            const phaseDateTime = this.getPhaseDateTime(true);
+            const phaseDateTime = this.getEffectivePhaseDateTime(false);
 
-            const dependencyPackageNames = this.repositoryPublishState.dependencyPackageNames;
+            const dependencyPackageNames = this.workingVersionState.dependencyPackageNames;
+
+            // Clear previously recorded organization dependency names.
+            dependencyPackageNames.splice(0);
 
             let anyDependenciesUpdated = false;
 
@@ -547,7 +519,8 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
 
                         dependencyPackageNames.push(dependencyPackageName);
 
-                        const dependencyPhaseState = configuration.repositories[dependencyRepositoryName].getPhaseState(true);
+                        const dependencyRepository = configuration.repositories[dependencyRepositoryName];
+                        const dependencyPhaseState = dependencyRepository.getPhaseState();
                         const dependencyVersion = dependencyPhaseState.version;
                         const dependencyParsedVersion = parseVersion(dependencyVersion);
 
@@ -572,7 +545,7 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
                         if (this.#isOrganizationDependencyUpdated(phaseDateTime, dependencyRepositoryName)) {
                             logger.trace(`Dependency repository ${dependencyRepositoryName} updated`);
 
-                            const dependencyRepositoryVersion = dependencyVersionFor(dependencyRepositoryName);
+                            const dependencyRepositoryVersion = getDependencyVersion(dependencyRepository);
 
                             if (dependencies[dependencyPackageName] !== dependencyRepositoryVersion) {
                                 // Dependency will be updated alongside all other dependencies.
@@ -580,11 +553,7 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
                             } else {
                                 updateDependencyPackageNamesSet.add(dependencyPackageName);
 
-                                const dependencyRepositoryPublishState = configuration.publishState.repositoryPublishStates[dependencyRepositoryName];
-
-                                for (const dependencyDependencyPackageName of dependencyRepositoryPublishState.dependencyPackageNames) {
-                                    updateDependencyPackageNamesSet.add(dependencyDependencyPackageName);
-                                }
+                                dependencyRepository.versionStates[this.workingVersion].dependencyPackageNames.forEach(addToUpdateDependencyPackageNamesSet);
                             }
 
                             anyDependenciesUpdated = true;
