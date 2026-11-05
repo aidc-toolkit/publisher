@@ -243,10 +243,12 @@ class AlphaPublisher extends Publisher<"alpha"> {
                 }
             }
 
+            let savePackageConfigurationPending = false;
+
             for (const dependencies of [packageConfiguration.devDependencies ?? {}, packageConfiguration.dependencies ?? {}]) {
                 for (const [dependencyPackageName, version] of Object.entries(dependencies)) {
                     // Ignore organization dependencies and any version that goes beyond basic compatible and approximate versions.
-                    if (this.dependencyRepositoryName(dependencyPackageName) === null && (version.startsWith("^") || version.startsWith("~"))) {
+                    if (this.configuration.dependencyRepositoryName(dependencyPackageName) === null && (version.startsWith("^") || version.startsWith("~"))) {
                         const update = updatesMap.get(dependencyPackageName);
 
                         if (update !== undefined) {
@@ -269,21 +271,21 @@ class AlphaPublisher extends Publisher<"alpha"> {
                                 if (updateVersion !== undefined) {
                                     dependencies[dependencyPackageName] = updateVersion;
 
-                                    this.savePackageConfigurationPending = true;
+                                    savePackageConfigurationPending = true;
                                 }
                             }
                         }
                     }
                 }
             }
-        }
 
-        if (this.savePackageConfigurationPending) {
-            this.savePackageConfiguration();
+            if (savePackageConfigurationPending) {
+                this.repository.savePackageConfiguration();
+            }
         }
 
         // Nothing to do if there are no changes and dependencies haven't been updated.
-        if (this.anyChanges(this.getPhaseDateTime()) || this.anyDependenciesUpdated) {
+        if (this.anyChanges(this.getPhaseDateTime()) || repository.anyDependenciesUpdated) {
             let parsedVersion = repository.parsedVersion;
 
             const switchToAlpha = parsedVersion.preReleaseIdentifier !== "alpha";

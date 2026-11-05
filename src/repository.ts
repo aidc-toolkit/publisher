@@ -1,5 +1,5 @@
 import { type ParsedVersion, parseVersion, pick } from "@aidc-toolkit/core";
-import fs from "node:fs";
+import * as fs from "node:fs";
 import type { Configuration } from "./configuration.js";
 import { PACKAGE_CONFIGURATION_PATH, type PackageConfiguration } from "./package-configuration.js";
 import { NEXT_PHASE, type Phase, type PhaseState } from "./phase.js";
@@ -129,6 +129,11 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
     #parsedVersion!: ParsedVersion;
 
     /**
+     * True if any dependencies, including additional, have been updated.
+     */
+    #anyDependenciesUpdated!: boolean;
+
+    /**
      * Constructor.
      *
      * @param configuration
@@ -208,6 +213,13 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
      */
     get parsedVersion(): ParsedVersion {
         return this.#parsedVersion;
+    }
+
+    /**
+     * Determine if any dependencies, including additional, have been updated.
+     */
+    get anyDependenciesUpdated(): boolean {
+        return this.#anyDependenciesUpdated;
     }
 
     /**
@@ -440,5 +452,164 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
         } else {
             fs.writeFileSync(PACKAGE_CONFIGURATION_PATH, `${JSON.stringify(this.#packageConfiguration, null, 2)}\n`);
         }
+    }
+
+    /**
+     * Align with branch if branch is a version branch.
+     *
+     * @param branch
+     * Branch.
+     */
+    alignWithBranch(branch: string): void {
+        const configuration = this.#configuration;
+        const phase = configuration.publishState.phase;
+
+        if (phase !== undefined) {
+            const parsedBranchGroups = /^v(?<branchMajorVersion>\d+)\.(?<branchMinorVersion>\d+)/u.exec(branch)?.groups;
+
+            // If this is a version branch, update the package version if required.
+            if (parsedBranchGroups !== undefined) {
+                const branchMajorVersion = Number(parsedBranchGroups["branchMajorVersion"]);
+                const branchMinorVersion = Number(parsedBranchGroups["branchMinorVersion"]);
+                const branchVersion = `${branchMajorVersion}.${branchMinorVersion}`;
+
+                if (!this.#configuration.versions.includes(branchVersion)) {
+                    throw new Error(`Branch version ${branchVersion} is not listed in configuration versions`);
+                }
+
+                const parsedVersion = this.parsedVersion;
+
+                // If version doesn't match, branch is new.
+                if (parsedVersion.majorVersion !== branchMajorVersion || parsedVersion.minorVersion !== branchMinorVersion) {
+                    if (phase !== "alpha") {
+                        throw new Error("Version transition not permitted except in alpha phase");
+                    }
+
+                    if (parsedVersion.majorVersion !== branchMajorVersion ? parsedVersion.majorVersion !== branchMajorVersion - 1 || branchMinorVersion !== 0 : parsedVersion.minorVersion !== branchMinorVersion - 1) {
+                        throw new Error(`Invalid transition from ${parsedVersion.majorVersion}.${parsedVersion.minorVersion} to ${branchMajorVersion}.${branchMinorVersion}`);
+                    }
+
+                    // Update package version with pre-release identifier "pending"; alpha publisher will commit it.
+                    this.updatePackageVersion(false, branchMajorVersion, branchMinorVersion, 0, "pending");
+                }
+            }
+        }
+    }
+
+    /**
+     * Determine if an organization dependency has been updated.
+     *
+     * @param phaseDateTime
+     * Phase date/time of the current repository.
+     *
+     * @param dependencyRepositoryName
+     * Dependency repository name.
+     *
+     * @returns
+     * True if organization dependency has been updated.
+     */
+    #isOrganizationDependencyUpdated(phaseDateTime: Date | undefined, dependencyRepositoryName: string): boolean {
+        return phaseDateTime === undefined || phaseDateTime.getTime() < this.#configuration.repositories[dependencyRepositoryName].getPhaseDateTime(true).getTime();
+    }
+
+    /**
+     * Update package configuration if any organization dependencies have been updated.
+     *
+     * @param dependencyVersionFor
+     * Callback to determine the version to use for the dependency repository.
+     *
+     * @returns
+     * Set of organization dependency package names that were not updated but should be subjected to "npm update".
+     */
+    updateOrganizationDependencies(dependencyVersionFor: (dependencyRepositoryName: string) => string): Set<string> {
+        const updateDependencyPackageNamesSet = new Set<string>();
+
+        const configuration = this.#configuration;
+        const phase = configuration.publishState.phase;
+
+        if (phase !== undefined) {
+            const logger = configuration.logger;
+            const packageConfiguration = this.packageConfiguration;
+            const parsedVersion = this.parsedVersion;
+            const phaseDateTime = this.getPhaseDateTime(true);
+
+            const dependencyPackageNames = this.repositoryPublishState.dependencyPackageNames;
+
+            let anyDependenciesUpdated = false;
+
+            for (const dependencies of [packageConfiguration.devDependencies ?? {}, packageConfiguration.dependencies ?? {}]) {
+                for (const dependencyPackageName of Object.keys(dependencies)) {
+                    const dependencyRepositoryName = configuration.dependencyRepositoryName(dependencyPackageName);
+
+                    // Dependency repository name is null if dependency is not within the organization.
+                    if (dependencyRepositoryName !== null) {
+                        logger.trace(`Organization dependency ${dependencyPackageName} from package configuration`);
+
+                        dependencyPackageNames.push(dependencyPackageName);
+
+                        const dependencyPhaseState = configuration.repositories[dependencyRepositoryName].getPhaseState(true);
+                        const dependencyVersion = dependencyPhaseState.version;
+                        const dependencyParsedVersion = parseVersion(dependencyVersion);
+
+                        // Dependency is valid if it has a lower major version.
+                        let validVersionSequence = dependencyParsedVersion.majorVersion < parsedVersion.majorVersion;
+
+                        if (!validVersionSequence && dependencyParsedVersion.majorVersion === parsedVersion.majorVersion) {
+                            // Dependency is valid if it has a lower minor version.
+                            validVersionSequence = dependencyParsedVersion.minorVersion < parsedVersion.minorVersion;
+
+                            if (!validVersionSequence && dependencyParsedVersion.minorVersion === parsedVersion.minorVersion) {
+                                // Dependency is valid if it has a lower or equal patch version or if this repository is about to update its patch version to match.
+                                validVersionSequence = dependencyParsedVersion.patchVersion <= parsedVersion.patchVersion ||
+                                    (dependencyParsedVersion.patchVersion === parsedVersion.patchVersion + 1 && phase === "alpha" && dependencyParsedVersion.preReleaseIdentifier === "alpha" && parsedVersion.preReleaseIdentifier !== "alpha");
+                            }
+                        }
+
+                        if (!validVersionSequence) {
+                            throw new Error(`Repository version ${packageConfiguration.version} is less than ${dependencyRepositoryName} dependency version ${dependencyVersion}`);
+                        }
+
+                        if (this.#isOrganizationDependencyUpdated(phaseDateTime, dependencyRepositoryName)) {
+                            logger.trace(`Dependency repository ${dependencyRepositoryName} updated`);
+
+                            const dependencyRepositoryVersion = dependencyVersionFor(dependencyRepositoryName);
+
+                            if (dependencies[dependencyPackageName] !== dependencyRepositoryVersion) {
+                                // Dependency will be updated alongside all other dependencies.
+                                dependencies[dependencyPackageName] = dependencyRepositoryVersion;
+                            } else {
+                                updateDependencyPackageNamesSet.add(dependencyPackageName);
+
+                                const dependencyRepositoryPublishState = configuration.publishState.repositoryPublishStates[dependencyRepositoryName];
+
+                                for (const dependencyDependencyPackageName of dependencyRepositoryPublishState.dependencyPackageNames) {
+                                    updateDependencyPackageNamesSet.add(dependencyDependencyPackageName);
+                                }
+                            }
+
+                            anyDependenciesUpdated = true;
+                        }
+                    }
+                }
+            }
+
+            if (anyDependenciesUpdated) {
+                this.savePackageConfiguration();
+            }
+
+            for (const additionalDependencyRepositoryName of this.additionalDependencies) {
+                logger.trace(`Organization dependency ${additionalDependencyRepositoryName} from additional dependencies`);
+
+                if (this.#isOrganizationDependencyUpdated(phaseDateTime, additionalDependencyRepositoryName)) {
+                    logger.trace(`Additional dependency repository ${additionalDependencyRepositoryName} updated`);
+
+                    anyDependenciesUpdated = true;
+                }
+            }
+
+            this.#anyDependenciesUpdated = anyDependenciesUpdated;
+        }
+
+        return updateDependencyPackageNamesSet;
     }
 }

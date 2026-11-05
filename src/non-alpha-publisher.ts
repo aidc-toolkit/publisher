@@ -343,7 +343,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
             });
 
             await this.#runStep("commit", () => {
-                this.commitUpdatedPackageVersion();
+                this.commitModified(`Updated to version ${this.repository.packageConfiguration.version}.`);
             });
 
             await this.#runStep("tag", () => {

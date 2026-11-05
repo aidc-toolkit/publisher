@@ -267,6 +267,21 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
     }
 
     /**
+     * Get the repository name for a dependency if it belongs to the organization or null if not.
+     *
+     * @param dependency
+     * Dependency.
+     *
+     * @returns
+     * Repository name for dependency or null.
+     */
+    dependencyRepositoryName(dependency: string): string | null {
+        const parsedDependency = dependency.split("/");
+
+        return parsedDependency.length === 2 && parsedDependency[0] === this.atOrganization ? parsedDependency[1] : null;
+    }
+
+    /**
      * Load configuration from JSON files for a phase.
      *
      * @param phase
