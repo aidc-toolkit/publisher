@@ -197,6 +197,124 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
     }
 
     /**
+     * Get the package configuration.
+     */
+    get packageConfiguration(): PackageConfiguration {
+        return this.#packageConfiguration;
+    }
+
+    /**
+     * Get the parsed version.
+     */
+    get parsedVersion(): ParsedVersion {
+        return this.#parsedVersion;
+    }
+
+    /**
+     * Get the repository publish state.
+     */
+    get repositoryPublishState(): RepositoryPublishState {
+        return this.#configuration.publishState.repositoryPublishStates[this.name];
+    }
+
+    /**
+     * Get the working version.
+     */
+    get workingVersion(): string {
+        return this.repositoryPublishState.workingVersion;
+    }
+
+    /**
+     * Get the version state.
+     */
+    get versionState(): VersionState {
+        const workingVersion = this.workingVersion;
+
+        let versionState = this.#raw.versionStates[workingVersion] as VersionState | undefined;
+
+        // Set the version state if undefined.
+        if (versionState === undefined) {
+            versionState = {
+                phaseStates: {}
+            };
+
+            this.#raw.versionStates[workingVersion] = versionState;
+        }
+
+        return versionState;
+    }
+
+    /**
+     * Get a phase state.
+     *
+     * @param isRequired
+     * True if phase state is required.
+     *
+     * @param phase
+     * Phase.
+     *
+     * @returns
+     * Phase state.
+     */
+    getPhaseState<IsRequired extends boolean>(isRequired: IsRequired, phase = this.#configuration.publishState.phase): IsRequired extends true ? PhaseState : PhaseState | undefined {
+        const phaseState = phase !== undefined ? this.versionState.phaseStates[phase] : undefined;
+
+        if (isRequired && phaseState === undefined) {
+            throw new Error(`Phase state for phase ${phase} is required but undefined.`);
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Type is determined above.
+        return phaseState as IsRequired extends true ? PhaseState : PhaseState | undefined;
+    }
+
+    /**
+     * Get a phase date/time.
+     *
+     * @param isRequired
+     * True if phase date/time is required.
+     *
+     * @returns
+     * Phase date/time or undefined if phase never before published.
+     */
+    getPhaseDateTime<IsRequired extends boolean>(isRequired: IsRequired): IsRequired extends true ? Date : Date | undefined {
+        let phase: Phase | null | undefined = this.#configuration.publishState.phase;
+
+        if (phase === undefined) {
+            throw new Error("Phase must be defined to get phase date/time");
+        }
+
+        const versionState = this.versionState;
+
+        let phaseDateTime;
+
+        do {
+            const dateTime = versionState.phaseStates[phase]?.dateTime;
+
+            if (phaseDateTime === undefined || (dateTime !== undefined && phaseDateTime.getTime() < dateTime.getTime())) {
+                // Phase date/time is the latest of current and all subsequent phases.
+                phaseDateTime = dateTime;
+            }
+        } while ((phase = NEXT_PHASE[phase]) !== null);
+
+        if (isRequired && phaseDateTime === undefined) {
+            throw new Error(`Repository ${this.name} does not have phase date/time for ${phase} phase`);
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Type is determined above.
+        return phaseDateTime as IsRequired extends true ? Date : Date | undefined;
+    }
+
+    /**
+     * Update the phase date/time, rounded up to the next second for Git resolution alignment.
+     */
+    updatePhaseDateTime(): void {
+        const now = new Date();
+
+        // Git resolution is one second so round up to next second to ensure that comparisons work as expected.
+        this.getPhaseState(true).dateTime = new Date(now.getTime() - now.getMilliseconds() + 1000);
+    }
+
+    /**
      * Start publishing this repository.
      */
     startPublish(): void {
@@ -322,123 +440,5 @@ export class Repository<TPhase extends Phase | undefined> implements RawReposito
         } else {
             fs.writeFileSync(PACKAGE_CONFIGURATION_PATH, `${JSON.stringify(this.#packageConfiguration, null, 2)}\n`);
         }
-    }
-
-    /**
-     * Get the package configuration.
-     */
-    get packageConfiguration(): PackageConfiguration {
-        return this.#packageConfiguration;
-    }
-
-    /**
-     * Get the parsed version.
-     */
-    get parsedVersion(): ParsedVersion {
-        return this.#parsedVersion;
-    }
-
-    /**
-     * Get the repository publish state.
-     */
-    get repositoryPublishState(): RepositoryPublishState {
-        return this.#configuration.publishState.repositoryPublishStates[this.name];
-    }
-
-    /**
-     * Get the working version.
-     */
-    get workingVersion(): string {
-        return this.repositoryPublishState.workingVersion;
-    }
-
-    /**
-     * Get the version state.
-     */
-    get versionState(): VersionState {
-        const workingVersion = this.workingVersion;
-
-        let versionState = this.#raw.versionStates[workingVersion] as VersionState | undefined;
-
-        // Set the version state if undefined.
-        if (versionState === undefined) {
-            versionState = {
-                phaseStates: {}
-            };
-
-            this.#raw.versionStates[workingVersion] = versionState;
-        }
-
-        return versionState;
-    }
-
-    /**
-     * Get a phase state.
-     *
-     * @param isRequired
-     * True if phase state is required.
-     *
-     * @param phase
-     * Phase.
-     *
-     * @returns
-     * Phase state.
-     */
-    getPhaseState<IsRequired extends boolean>(isRequired: IsRequired, phase = this.#configuration.publishState.phase): IsRequired extends true ? PhaseState : PhaseState | undefined {
-        const phaseState = phase !== undefined ? this.versionState.phaseStates[phase] : undefined;
-
-        if (isRequired && phaseState === undefined) {
-            throw new Error(`Phase state for phase ${phase} is required but undefined.`);
-        }
-
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Type is determined above.
-        return phaseState as IsRequired extends true ? PhaseState : PhaseState | undefined;
-    }
-
-    /**
-     * Get a phase date/time.
-     *
-     * @param isRequired
-     * True if phase date/time is required.
-     *
-     * @returns
-     * Phase date/time or undefined if phase never before published.
-     */
-    getPhaseDateTime<IsRequired extends boolean>(isRequired: IsRequired): IsRequired extends true ? Date : Date | undefined {
-        let phase: Phase | null | undefined = this.#configuration.publishState.phase;
-
-        if (phase === undefined) {
-            throw new Error("Phase must be defined to get phase date/time");
-        }
-
-        const versionState = this.versionState;
-
-        let phaseDateTime;
-
-        do {
-            const dateTime = versionState.phaseStates[phase]?.dateTime;
-
-            if (phaseDateTime === undefined || (dateTime !== undefined && phaseDateTime.getTime() < dateTime.getTime())) {
-                // Phase date/time is the latest of current and all subsequent phases.
-                phaseDateTime = dateTime;
-            }
-        } while ((phase = NEXT_PHASE[phase]) !== null);
-
-        if (isRequired && phaseDateTime === undefined) {
-            throw new Error(`Repository ${this.name} does not have phase date/time for ${phase} phase`);
-        }
-
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Type is determined above.
-        return phaseDateTime as IsRequired extends true ? Date : Date | undefined;
-    }
-
-    /**
-     * Update the phase date/time, rounded up to the next second for Git resolution alignment.
-     */
-    updatePhaseDateTime(): void {
-        const now = new Date();
-
-        // Git resolution is one second so round up to next second to ensure that comparisons work as expected.
-        this.getPhaseState(true).dateTime = new Date(now.getTime() - now.getMilliseconds() + 1000);
     }
 }
