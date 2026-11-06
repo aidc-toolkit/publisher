@@ -290,7 +290,7 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
      * @returns
      * Configuration.
      */
-    static async load<TPhase extends Phase | undefined>(branch: string, phase: TPhase, logger: Logger<object>, isDryRun: boolean): Promise<Configuration<TPhase>> {
+    static async load<TPhase extends Phase | undefined>(phase: TPhase, logger: Logger<object>, isDryRun: boolean): Promise<Configuration<TPhase>> {
         const appDataStorage = await LocalAppDataStorage.get(".");
 
         const sharedConfigurationAppData = await appDataStorage.read(SHARED_CONFIGURATION_KEY);
