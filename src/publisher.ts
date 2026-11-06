@@ -92,7 +92,12 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     /**
      * Configuration.
      */
-    #configuration?: Configuration<TPhase>;
+    #configuration!: Configuration<TPhase>;
+
+    /**
+     * True if the current branch is the latest version branch.
+     */
+    #isLatestVersionBranch!: boolean;
 
     /**
      * Current publish state. Final value will point to the publisher repository if needed for finalization.
@@ -141,10 +146,6 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
      * Get the configuration.
      */
     protected get configuration(): Configuration<TPhase> {
-        if (this.#configuration === undefined) {
-            throw new Error("Cannot access configuration before initialization");
-        }
-
         return this.#configuration;
     }
 
@@ -255,8 +256,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     protected abstract isValidBranch(): boolean;
 
     /**
-     * Run a command and optionally capture its output. This may be called prior to initialization, but it will bypass
-     * any additional arguments in the configuration if so.
+     * Run a command and optionally capture its output.
      *
      * @param runOption
      * Run option; applies only if in dry run mode.
@@ -285,7 +285,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
         }
 
         // Construct all arguments.
-        const allArgs = [...args, ...this.#configuration !== undefined ? this.configuration.getAdditionalArgs(command) : [], ...effectiveRunOption !== RunOptions.ParameterizeOnDryRun ? [] : ["--dry-run"]];
+        const allArgs = [...args, ...this.configuration.getAdditionalArgs(command), ...effectiveRunOption !== RunOptions.ParameterizeOnDryRun ? [] : ["--dry-run"]];
 
         let output: string[];
 
@@ -807,7 +807,10 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
      * Initialize publication.
      */
     protected async initialize(): Promise<void> {
-        this.#configuration = await Configuration.load<TPhase>(this.#getCurrentBranch(), this.phase, this.logger, this.isDryRun);
+        this.#configuration = await Configuration.load<TPhase>(this.phase, this.logger, this.isDryRun);
+
+        // Publisher is valid only when on latest version branch.
+        this.#isLatestVersionBranch = this.#getCurrentBranch() === `v${this.configuration.latestVersion}`;
     }
 
     /**
@@ -841,8 +844,11 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
 
                             this.#buildCurrentPublishState(repository);
 
-                            // eslint-disable-next-line no-await-in-loop -- Next iteration requires previous to finish.
-                            await this.publish();
+                            // Publish the repository if on the latest version branch, no changes to code or version control are expected, or repository is the publisher repository.
+                            if (this.#isLatestVersionBranch || this.phase === undefined || repositoryName === "publisher") {
+                                // eslint-disable-next-line no-await-in-loop -- Next iteration requires previous to finish.
+                                await this.publish();
+                            }
 
                             delete publishState.repositoryName;
                             delete publishState.step;
@@ -871,5 +877,10 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
      */
     protected async finalize(): Promise<void> {
         await this.#saveConfiguration(true);
+
+        // Publisher needs to be able to publish itself so this is not an error until the end.
+        if (!this.#isLatestVersionBranch) {
+            this.logger.error("Publisher is not on latest version branch. Review config/publisher.local.json before switching.");
+        }
     }
 }
