@@ -1,5 +1,4 @@
-import { type LogLevelKey, logLevelOf, omit, pick } from "@aidc-toolkit/core";
-import { FileAppDataStorage } from "@aidc-toolkit/core/src/file-app-data-storage.js";
+import { LocalAppDataStorage, type LogLevelKey, logLevelOf, omit, pick } from "@aidc-toolkit/core";
 import type { Logger } from "tslog";
 import type { Phase } from "./phase.js";
 import {
@@ -305,7 +304,7 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
      * Configuration.
      */
     static async load<TPhase extends Phase | undefined>(branch: string, phase: TPhase, logger: Logger<object>, isDryRun: boolean): Promise<Configuration<TPhase>> {
-        const appDataStorage = new FileAppDataStorage(".");
+        const appDataStorage = new (await LocalAppDataStorage)(".");
 
         const sharedConfigurationAppData = await appDataStorage.read(SHARED_CONFIGURATION_KEY);
 
@@ -414,7 +413,7 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
             this.#logger.debug(`Dry run: Saving shared configuration\n${JSON.stringify(sharedConfiguration, null, 2)}\n`);
             this.#logger.debug(`Dry run: Saving local configuration\n${JSON.stringify(localConfiguration, null, 2)}\n`);
         } else {
-            const appDataStorage = new FileAppDataStorage(".");
+            const appDataStorage = new (await LocalAppDataStorage)(".");
 
             await appDataStorage.write(SHARED_CONFIGURATION_KEY, sharedConfiguration, true);
             await appDataStorage.write(LOCAL_CONFIGURATION_KEY, localConfiguration, true);
