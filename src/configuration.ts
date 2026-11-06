@@ -14,6 +14,9 @@ import type { LocalVersionState, SharedVersionState, VersionState } from "./vers
 const SHARED_CONFIGURATION_KEY = "config/publisher";
 const LOCAL_CONFIGURATION_KEY = "config/publisher.local";
 
+/**
+ * Shared configuration path.
+ */
 export const SHARED_CONFIGURATION_PATH = `${SHARED_CONFIGURATION_KEY}.json`;
 
 /**
