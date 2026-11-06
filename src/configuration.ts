@@ -396,7 +396,7 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
                 ...pick(repository, "directory", "dependencyType", "additionalDependencies", "excludePaths"),
                 versionStates: Object.fromEntries(Object.entries(repository.versionStates).map<[string, SharedVersionState]>(([version, versionState]) => [version, {
                     phaseStates: pick(versionState.phaseStates, "beta", "prod")
-                }]).filter(([_version, versionState]) => Object.keys(versionState).length !== 0))
+                }]).filter(([_version, versionState]) => Object.keys(versionState.phaseStates).length !== 0))
             }]))
         };
 
