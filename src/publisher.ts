@@ -510,6 +510,16 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     }
 
     /**
+     * Get the current branch.
+     *
+     * @returns
+     * Current branch.
+     */
+    #getCurrentBranch(): string {
+        return this.run(RunOptions.RunAlways, true, false, "git", "branch", "--show-current")[0];
+    }
+
+    /**
      * Initialize publication.
      */
     protected async initialize(): Promise<void> {
@@ -556,7 +566,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
 
                             repository.startPublish();
 
-                            const branch = this.run(RunOptions.RunAlways, true, false, "git", "branch", "--show-current")[0];
+                            const branch = this.#getCurrentBranch();
 
                             this.#branch = branch;
 
