@@ -286,6 +286,9 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
     /**
      * Load configuration from JSON files for a phase.
      *
+     * @param branch
+     * Branch; must be of the format `v{$latestVersion}`.
+     *
      * @param phase
      * Phase.
      *
@@ -298,7 +301,7 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
      * @returns
      * Configuration.
      */
-    static async load<TPhase extends Phase | undefined>(phase: TPhase, logger: Logger<object>, isDryRun: boolean): Promise<Configuration<TPhase>> {
+    static async load<TPhase extends Phase | undefined>(branch: string, phase: TPhase, logger: Logger<object>, isDryRun: boolean): Promise<Configuration<TPhase>> {
         const appDataStorage = new FileAppDataStorage(".");
 
         const sharedConfigurationAppData = await appDataStorage.read(SHARED_CONFIGURATION_KEY);
@@ -309,6 +312,13 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
 
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Assume shared configuration is valid.
         const sharedConfiguration = sharedConfigurationAppData as SharedConfiguration;
+
+        const expectedBranch = `v${sharedConfiguration.versions[sharedConfiguration.versions.length - 1]}`;
+
+        // Verify that the branch is the latest version.
+        if (branch !== expectedBranch) {
+            throw new Error(`Publisher branch ${branch} must be ${expectedBranch}`);
+        }
 
         const localConfigurationAppData = await appDataStorage.read(LOCAL_CONFIGURATION_KEY);
 

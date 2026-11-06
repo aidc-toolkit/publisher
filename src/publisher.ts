@@ -92,7 +92,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     /**
      * Configuration.
      */
-    #configuration!: Configuration<TPhase>;
+    #configuration?: Configuration<TPhase>;
 
     /**
      * Current publish state. Final value will point to the publisher repository if needed for finalization.
@@ -141,6 +141,10 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
      * Get the configuration.
      */
     protected get configuration(): Configuration<TPhase> {
+        if (this.#configuration === undefined) {
+            throw new Error("Cannot access configuration before initialization");
+        }
+
         return this.#configuration;
     }
 
@@ -251,7 +255,8 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     protected abstract isValidBranch(): boolean;
 
     /**
-     * Run a command and optionally capture its output.
+     * Run a command and optionally capture its output. This may be called prior to initialization, but it will bypass
+     * any additional arguments in the configuration if so.
      *
      * @param runOption
      * Run option; applies only if in dry run mode.
@@ -280,7 +285,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
         }
 
         // Construct all arguments.
-        const allArgs = [...args, ...this.configuration.getAdditionalArgs(command), ...effectiveRunOption !== RunOptions.ParameterizeOnDryRun ? [] : ["--dry-run"]];
+        const allArgs = [...args, ...this.#configuration !== undefined ? this.configuration.getAdditionalArgs(command) : [], ...effectiveRunOption !== RunOptions.ParameterizeOnDryRun ? [] : ["--dry-run"]];
 
         let output: string[];
 
@@ -658,7 +663,17 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     async #saveConfiguration(isComplete: boolean): Promise<void> {
         await this.configuration.save(isComplete);
     }
-    
+
+    /**
+     * Get the current branch.
+     *
+     * @returns
+     * Current branch.
+     */
+    #getCurrentBranch(): string {
+        return this.run(RunOptions.RunAlways, true, false, "git", "branch", "--show-current")[0];
+    }
+
     /**
      * Build the publish state for the current repository.
      *
@@ -666,7 +681,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
      * Current repository.
      */
     #buildCurrentPublishState(repository: Repository<TPhase>): void {
-        const branch = this.run(RunOptions.RunAlways, true, false, "git", "branch", "--show-current")[0];
+        const branch = this.#getCurrentBranch();
 
         this.#currentPublishState = {
             repository,
@@ -792,7 +807,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
      * Initialize publication.
      */
     protected async initialize(): Promise<void> {
-        this.#configuration = await Configuration.load<TPhase>(this.phase, this.logger, this.isDryRun);
+        this.#configuration = await Configuration.load<TPhase>(this.#getCurrentBranch(), this.phase, this.logger, this.isDryRun);
     }
 
     /**
