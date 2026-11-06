@@ -192,8 +192,8 @@
         "1.0": {
           "phaseStates": {
             "beta": {
-              "version": "1.0.54-beta",
-              "dateTime": "dateTime:2026-11-04T01:54:22.000Z"
+              "version": "1.0.55-beta",
+              "dateTime": "dateTime:2026-11-06T14:04:50.000Z"
             },
             "prod": {
               "version": "1.0.54",
