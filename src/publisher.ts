@@ -138,47 +138,6 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     }
 
     /**
-     * Set the alpha registry for the organization.
-     */
-    protected setOrganizationAlphaRegistry(): void {
-        this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", "set", `${this.configuration.atOrganizationRegistryParameter}=${this.configuration.alphaRegistry}`, "--location", "project");
-    }
-
-    /**
-     * Unset the alpha registry for the organization.
-     */
-    protected unsetOrganizationAlphaRegistry(): void {
-        this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", "delete", this.configuration.atOrganizationRegistryParameter, "--location", "project");
-    }
-
-    /**
-     * Get the dependency version for a dependency repository.
-     *
-     * @param dependencyRepository
-     * Dependency repository.
-     *
-     * @returns
-     * Dependency version.
-     */
-    protected abstract getDependencyVersion(dependencyRepository: Repository<TPhase>): string;
-
-    /**
-     * Determine if repository change is valid for the phase.
-     *
-     * @returns
-     * True if repository change is valid for the phase.
-     */
-    protected abstract isValidRepositoryChange(): boolean;
-
-    /**
-     * Determine if branch is valid for the phase.
-     *
-     * @returns
-     * True if branch is valid for the phase.
-     */
-    protected abstract isValidBranch(): boolean;
-
-    /**
      * Run a command and optionally capture its output.
      *
      * @param runOption
@@ -285,6 +244,47 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
 
         return answer;
     }
+
+    /**
+     * Set the alpha registry for the organization.
+     */
+    protected setOrganizationAlphaRegistry(): void {
+        this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", "set", `${this.configuration.atOrganizationRegistryParameter}=${this.configuration.alphaRegistry}`, "--location", "project");
+    }
+
+    /**
+     * Unset the alpha registry for the organization.
+     */
+    protected unsetOrganizationAlphaRegistry(): void {
+        this.run(RunOptions.SkipOnDryRun, false, false, "npm", "config", "delete", this.configuration.atOrganizationRegistryParameter, "--location", "project");
+    }
+
+    /**
+     * Get the dependency version for a dependency repository.
+     *
+     * @param dependencyRepository
+     * Dependency repository.
+     *
+     * @returns
+     * Dependency version.
+     */
+    protected abstract getDependencyVersion(dependencyRepository: Repository<TPhase>): string;
+
+    /**
+     * Determine if repository change is valid for the phase.
+     *
+     * @returns
+     * True if repository change is valid for the phase.
+     */
+    protected abstract isValidRepositoryChange(): boolean;
+
+    /**
+     * Determine if branch is valid for the phase.
+     *
+     * @returns
+     * True if branch is valid for the phase.
+     */
+    protected abstract isValidBranch(): boolean;
 
     /**
      * Get the next branch in the versions or main if none.
