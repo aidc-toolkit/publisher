@@ -351,10 +351,6 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
                             phaseStates: {}
                         };
 
-                        const localVersionState = localRepository.versionStates[version] ?? {
-                            phaseStates: {}
-                        };
-
                         return [version, {
                             ...sharedVersionState,
                             ...localVersionState,
