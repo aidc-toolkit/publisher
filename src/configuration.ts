@@ -349,8 +349,12 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
                 return [repositoryName, {
                     ...sharedRepository,
                     ...localRepository,
-                    versionStates: Object.fromEntries(Object.entries(localRepository.versionStates).map<[string, VersionState]>(([version, localVersionState]) => {
+                    versionStates: Object.fromEntries(sharedConfiguration.versions.map<[string, VersionState]>((version) => {
                         const sharedVersionState = sharedRepository.versionStates[version] ?? {
+                            phaseStates: {}
+                        };
+
+                        const localVersionState = localRepository.versionStates[version] ?? {
                             phaseStates: {}
                         };
 
