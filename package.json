@@ -1,6 +1,6 @@
 {
   "name": "@aidc-toolkit/publisher",
-  "version": "1.0.59-beta",
+  "version": "1.0.59",
   "description": "Publisher for AIDC Toolkit",
   "type": "module",
   "private": true,
