@@ -379,35 +379,38 @@ export class Configuration<TPhase extends Phase | undefined> implements Required
      * If true, publication is complete.
      */
     async save(isComplete: boolean): Promise<void> {
-        const rawConfiguration = !isComplete ? this.#raw : omit(this.#raw, "publishState");
+        // Undefined phase is not permitted to make changes to configuration.
+        if (this.publishState.phase !== undefined) {
+            const rawConfiguration = !isComplete ? this.#raw : omit(this.#raw, "publishState");
 
-        const sharedConfiguration: SharedConfiguration = {
-            ...pick(rawConfiguration as SharedConfiguration, "versions", "organization"),
-            repositories: Object.fromEntries(Object.entries(rawConfiguration.repositories as SharedConfiguration["repositories"]).map<[string, SharedRepository]>(([repositoryName, repository]) => [repositoryName, {
-                ...pick(repository, "directory", "dependencyType", "additionalDependencies", "excludePaths"),
-                versionStates: Object.fromEntries(Object.entries(repository.versionStates).map<[string, SharedVersionState]>(([version, versionState]) => [version, {
-                    phaseStates: pick(versionState.phaseStates, "beta", "prod")
-                }]).filter(([_version, versionState]) => Object.keys(versionState.phaseStates).length !== 0))
-            }]))
-        };
-
-        const localConfiguration: LocalConfiguration<TPhase> = {
-            ...pick(rawConfiguration as LocalConfiguration<TPhase>, "alphaRegistry", "logLevel", "additionalArgs", "publishState"),
-            repositories: Object.fromEntries(Object.entries(rawConfiguration.repositories as LocalConfiguration<TPhase>["repositories"]).map<[string, LocalRepository]>(([repositoryName, repository]) => [repositoryName, {
-                versionStates: Object.fromEntries(Object.entries(repository.versionStates).map<[string, LocalVersionState]>(([version, versionState]) => [version, {
-                    phaseStates: pick(versionState.phaseStates, "alpha")
+            const sharedConfiguration: SharedConfiguration = {
+                ...pick(rawConfiguration as SharedConfiguration, "versions", "organization"),
+                repositories: Object.fromEntries(Object.entries(rawConfiguration.repositories as SharedConfiguration["repositories"]).map<[string, SharedRepository]>(([repositoryName, repository]) => [repositoryName, {
+                    ...pick(repository, "directory", "dependencyType", "additionalDependencies", "excludePaths"),
+                    versionStates: Object.fromEntries(Object.entries(repository.versionStates).map<[string, SharedVersionState]>(([version, versionState]) => [version, {
+                        phaseStates: pick(versionState.phaseStates, "beta", "prod")
+                    }]).filter(([_version, versionState]) => Object.keys(versionState.phaseStates).length !== 0))
                 }]))
-            }]))
-        };
+            };
 
-        if (this.#isDryRun) {
-            this.#logger.debug(`Dry run: Saving shared configuration\n${JSON.stringify(sharedConfiguration, null, 2)}\n`);
-            this.#logger.debug(`Dry run: Saving local configuration\n${JSON.stringify(localConfiguration, null, 2)}\n`);
-        } else {
-            const appDataStorage = new (await LocalAppDataStorage)(".");
+            const localConfiguration: LocalConfiguration<TPhase> = {
+                ...pick(rawConfiguration as LocalConfiguration<TPhase>, "alphaRegistry", "logLevel", "additionalArgs", "publishState"),
+                repositories: Object.fromEntries(Object.entries(rawConfiguration.repositories as LocalConfiguration<TPhase>["repositories"]).map<[string, LocalRepository]>(([repositoryName, repository]) => [repositoryName, {
+                    versionStates: Object.fromEntries(Object.entries(repository.versionStates).map<[string, LocalVersionState]>(([version, versionState]) => [version, {
+                        phaseStates: pick(versionState.phaseStates, "alpha")
+                    }]))
+                }]))
+            };
 
-            await appDataStorage.write(SHARED_CONFIGURATION_KEY, sharedConfiguration, true);
-            await appDataStorage.write(LOCAL_CONFIGURATION_KEY, localConfiguration, true);
+            if (this.#isDryRun) {
+                this.#logger.debug(`Dry run: Saving shared configuration\n${JSON.stringify(sharedConfiguration, null, 2)}\n`);
+                this.#logger.debug(`Dry run: Saving local configuration\n${JSON.stringify(localConfiguration, null, 2)}\n`);
+            } else {
+                const appDataStorage = new (await LocalAppDataStorage)(".");
+
+                await appDataStorage.write(SHARED_CONFIGURATION_KEY, sharedConfiguration, true);
+                await appDataStorage.write(LOCAL_CONFIGURATION_KEY, localConfiguration, true);
+            }
         }
     }
 }

@@ -880,7 +880,11 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
 
         // Publisher needs to be able to publish itself so this is not an error until the end.
         if (!this.#isLatestVersionBranch) {
-            this.logger.error("Publisher is not on latest version branch. Review config/publisher.local.json before switching.");
+            this.logger.error("Publisher is not on latest version branch");
+
+            if (this.configuration.publishState.phase !== undefined) {
+                this.logger.error("Review config/publisher.local.json for alignment with downstream versions");
+            }
         }
     }
 }
