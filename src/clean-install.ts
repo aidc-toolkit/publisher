@@ -25,20 +25,6 @@ class CleanInstall extends Publisher<undefined> {
     /**
      * @inheritDoc
      */
-    protected override isValidRepositoryChange(): boolean {
-        return false;
-    }
-
-    /**
-     * @inheritDoc
-     */
-    protected override isValidBranch(): boolean {
-        return true;
-    }
-
-    /**
-     * @inheritDoc
-     */
     protected override publish(): void {
         const repository = this.repository;
 

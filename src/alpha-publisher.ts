@@ -58,7 +58,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
     /**
      * @inheritDoc
      */
-    protected override isValidRepositoryChange(): boolean {
+    protected override handleRemoteChanges(): boolean {
         const phaseStates = this.repository.workingVersionState.phaseStates;
 
         const alphaDateTime = phaseStates.alpha?.dateTime;
@@ -66,23 +66,19 @@ class AlphaPublisher extends Publisher<"alpha"> {
         const nextBranch = this.getNextBranch();
 
         if (alphaDateTime !== undefined && prodDateTime !== undefined && alphaDateTime.getTime() < prodDateTime.getTime() && nextBranch !== undefined) {
+            this.logger.trace("Fetching changes");
+
             // Fetch all changes.
             this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "fetch");
 
             if (nextBranch === "main") {
+                this.logger.trace("Merging with main");
+
                 // This is the latest version so merge changes that were pushed to main.
                 this.run(RunOptions.ParameterizeOnDryRun, false, false, "git", "merge", "origin/main");
             }
         }
 
-        return true;
-    }
-
-    /**
-     * @inheritDoc
-     */
-    protected override isValidBranch(): boolean {
-        // Any branch is valid for alpha publication.
         return true;
     }
 
@@ -110,10 +106,10 @@ class AlphaPublisher extends Publisher<"alpha"> {
     }
 
     /**
-     * Assert that locale resources are a type match for English (default) resources.
+     * Assert that locale resources are a type match for default resources.
      *
-     * @param enResources
-     * English resources.
+     * @param defaultResources
+     * Default resources.
      *
      * @param locale
      * Locale.
@@ -124,63 +120,71 @@ class AlphaPublisher extends Publisher<"alpha"> {
      * @param parent
      * Parent key name (set recursively).
      */
-    static #assertValidResources(enResources: object, locale: string, localeResources: object, parent?: string): void {
-        const enResourcesMap = new Map<string, object>(Object.entries(enResources));
+    #assertValidResources(defaultResources: object, locale: string, localeResources: object, parent?: string): void {
+        const logger = this.logger;
+
+        const defaultResourcesMap = new Map<string, object>(Object.entries(defaultResources));
         const localeResourcesMap = new Map<string, object>(Object.entries(localeResources));
 
         const isFullLocale = locale.includes("-");
 
-        for (const [enKey, enValue] of enResourcesMap) {
-            const enFullKey = `${parent === undefined ? "" : `${parent}.`}${enKey}`;
+        for (const [defaultKey, defaultValue] of defaultResourcesMap) {
+            const defaultFullKey = `${parent === undefined ? "" : `${parent}.`}${defaultKey}`;
 
-            if (localeResourcesMap.has(enKey)) {
-                const localeValue = localeResourcesMap.get(enKey);
+            logger.debug(`Processing default key ${defaultFullKey}`);
 
-                const enValueType = typeof enValue;
+            if (localeResourcesMap.has(defaultKey)) {
+                const localeValue = localeResourcesMap.get(defaultKey);
+
+                const defaultValueType = typeof defaultValue;
                 const localeValueType = typeof localeValue;
 
-                if (localeValueType !== enValueType) {
+                if (localeValueType !== defaultValueType) {
                     // Mismatched value type is allowed when one is undefined to indicate that the resource doesn't apply in that locale.
-                    if (enValueType !== "undefined" && localeValueType !== "undefined") {
-                        throw new Error(`Mismatched value type ${localeValueType} for key ${enFullKey} in ${locale} resources (expected ${enValueType})`);
+                    if (defaultValueType !== "undefined" && localeValueType !== "undefined") {
+                        throw new Error(`Mismatched value type ${localeValueType} for key ${defaultFullKey} in ${locale} resources (expected ${defaultValueType})`);
                     }
-                } else if (enValueType === "string") {
+                } else if (defaultValueType === "string") {
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Value is known to be string.
-                    const enParameterNames = AlphaPublisher.#parseParameterNames(enValue as unknown as string);
+                    const defaultParameterNames = AlphaPublisher.#parseParameterNames(defaultValue as unknown as string);
+
+                    logger.debug(`Default parameter names ${defaultParameterNames}`);
 
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Value is known to be string.
                     const localeParameterNames = AlphaPublisher.#parseParameterNames(localeValue as unknown as string);
 
-                    for (const enParameterName of enParameterNames) {
-                        if (!localeParameterNames.includes(enParameterName)) {
-                            throw new Error(`Missing parameter ${enParameterName} for key ${enFullKey} in ${locale} resources`);
+                    logger.debug(`Locale parameter names ${localeParameterNames}`);
+
+                    for (const defaultParameterName of defaultParameterNames) {
+                        if (!localeParameterNames.includes(defaultParameterName)) {
+                            throw new Error(`Missing parameter ${defaultParameterName} for key ${defaultFullKey} in ${locale} resources`);
                         }
                     }
 
                     for (const localeParameterName of localeParameterNames) {
-                        if (!enParameterNames.includes(localeParameterName)) {
-                            throw new Error(`Extraneous parameter ${localeParameterName} for key ${enFullKey} in ${locale} resources`);
+                        if (!defaultParameterNames.includes(localeParameterName)) {
+                            throw new Error(`Extraneous parameter ${localeParameterName} for key ${defaultFullKey} in ${locale} resources`);
                         }
                     }
-                } else if (enValueType === "object") {
+                } else if (defaultValueType === "object") {
                     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Value is known to be object.
-                    AlphaPublisher.#assertValidResources(enValue, locale, localeValue!, `${parent === undefined ? "" : `${parent}.`}${enKey}`);
+                    this.#assertValidResources(defaultValue, locale, localeValue!, `${parent === undefined ? "" : `${parent}.`}${defaultKey}`);
                 }
             // Full locale falls back to language so ignore if missing.
             } else if (!isFullLocale) {
-                throw new Error(`Missing key ${enFullKey} in ${locale} resources`);
+                throw new Error(`Missing key ${defaultFullKey} in ${locale} resources`);
             }
         }
 
         for (const [localeKey] of localeResourcesMap) {
-            if (!enResourcesMap.has(localeKey)) {
+            if (!defaultResourcesMap.has(localeKey)) {
                 throw new Error(`Extraneous key ${parent === undefined ? "" : `${parent}.`}${localeKey} in ${locale} resources`);
             }
         }
     }
 
     /**
-     * Check for updates with the specified target.
+     * Check for dependency package updates for a specified target (semantic version or latest overall).
      *
      * @param target
      * Target.
@@ -188,7 +192,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
      * @returns
      * Updated versions mapped by package name.
      */
-    private checkUpdates(target: string): Map<string, string> {
+    private checkDependencyUpdates(target: string): Map<string, string> {
         const updatesMap = new Map<string, string>();
 
         for (const line of this.run(RunOptions.RunAlways, true, true, "ncu", "--target", target)) {
@@ -206,14 +210,18 @@ class AlphaPublisher extends Publisher<"alpha"> {
      * @inheritDoc
      */
     protected override async publish(): Promise<void> {
+        const logger = this.logger;
+
         const repository = this.repository;
         const packageConfiguration = repository.packageConfiguration;
         const workingVersion = repository.workingVersion;
 
         // Check for external updates, even if there are no changes, if not in fast mode and working on the latest version.
         if (!this.#fast && workingVersion === this.configuration.latestVersion) {
-            const latestSemanticUpdatesMap = this.checkUpdates("semver");
-            const latestUpdatesMap = this.checkUpdates("latest");
+            logger.trace("Checking for dependency package updates");
+
+            const latestSemanticUpdatesMap = this.checkDependencyUpdates("semver");
+            const latestUpdatesMap = this.checkDependencyUpdates("latest");
 
             const updatesMap = new Map<string, {
                 /**
@@ -228,12 +236,16 @@ class AlphaPublisher extends Publisher<"alpha"> {
             }>();
 
             for (const [packageName, latestSemanticVersion] of latestSemanticUpdatesMap) {
+                logger.debug(`${packageName} latest semantic version ${latestSemanticVersion}`);
+
                 updatesMap.set(packageName, {
                     latestSemanticVersion
                 });
             }
 
             for (const [packageName, latestVersion] of latestUpdatesMap) {
+                logger.debug(`${packageName} latest version ${latestVersion}`);
+
                 const update = updatesMap.get(packageName);
 
                 if (update !== undefined) {
@@ -293,6 +305,8 @@ class AlphaPublisher extends Publisher<"alpha"> {
             const switchToAlpha = parsedVersion.preReleaseIdentifier !== "alpha";
 
             if (switchToAlpha) {
+                logger.trace("Switching to alpha pre-release");
+
                 this.setOrganizationAlphaRegistry();
 
                 // Pre-release identifier "pending" indicates that patch version should remain unchanged.
@@ -313,7 +327,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
             // Run generate source if present.
             this.run(RunOptions.SkipOnDryRun, false, false, "npm", "run", "generate-source", "--if-present");
 
-            // Skip lint and localization checks if in fast mode.
+            // Run lint and localization checks if not in fast mode.
             if (!this.#fast) {
                 // Run lint if present.
                 this.run(RunOptions.SkipOnDryRun, false, false, "npm", "run", "lint", "--if-present");
@@ -322,6 +336,8 @@ class AlphaPublisher extends Publisher<"alpha"> {
 
                 // Check for localization.
                 if (fs.existsSync(localePath) && fs.statSync(localePath).isDirectory()) {
+                    logger.trace("Validating localization");
+
                     const localeResourcesMap = new Map<string, object>();
 
                     for (const entry of fs.readdirSync(localePath)) {
@@ -344,15 +360,15 @@ class AlphaPublisher extends Publisher<"alpha"> {
                     }
 
                     if (localeResourcesMap.size !== 0) {
-                        const enResources = localeResourcesMap.get(DEFAULT_LANGUAGE);
+                        const defaultResources = localeResourcesMap.get(DEFAULT_LANGUAGE);
 
-                        if (enResources === undefined) {
-                            throw new Error("English resources file not found");
+                        if (defaultResources === undefined) {
+                            throw new Error("Default resources file not found");
                         }
 
                         for (const [locale, resources] of localeResourcesMap.entries()) {
                             if (locale !== DEFAULT_LANGUAGE) {
-                                AlphaPublisher.#assertValidResources(enResources, locale, resources);
+                                this.#assertValidResources(defaultResources, locale, resources);
                             }
                         }
                     }
@@ -362,7 +378,7 @@ class AlphaPublisher extends Publisher<"alpha"> {
             // Run alpha build.
             this.run(RunOptions.SkipOnDryRun, false, false, "npm", "run", "build:alpha");
 
-            // Run test if present and not in fast mode.
+            // Run test if not in fast mode and present.
             if (!this.#fast) {
                 this.run(RunOptions.SkipOnDryRun, false, false, "npm", "run", "test", "--if-present");
             }

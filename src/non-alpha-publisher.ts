@@ -110,13 +110,6 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
     /**
      * @inheritDoc
      */
-    protected override isValidRepositoryChange(): boolean {
-        return false;
-    }
-
-    /**
-     * @inheritDoc
-     */
     protected override isValidBranch(): boolean {
         const parsedVersion = this.repository.parsedVersion;
 
@@ -141,7 +134,7 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
         const publishStateStep = publishState.step;
 
         if (publishStateStep === undefined || publishStateStep === step) {
-            this.logger.debug(`Running step ${step}`);
+            this.logger.trace(`Running step ${step}`);
 
             publishState.step = step;
 
@@ -205,6 +198,8 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
 
             let workflowRunID = -1;
 
+            this.logger.trace("Waiting for workflow to start");
+
             await this.#runJob(async () =>
                 this.#octokit.rest.actions.listWorkflowRunsForRepo({
                     owner: this.configuration.organization,
@@ -254,6 +249,8 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
      * @inheritDoc
      */
     protected override async publish(): Promise<void> {
+        const logger = this.logger;
+
         const repository = this.repository;
         const branch = this.branch;
         const parsedVersion = repository.parsedVersion;
@@ -271,6 +268,8 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
             if (this.anyChanges(repository.workingVersionState.phaseStates[previousPhase]?.dateTime)) {
                 throw new Error(`Repository has changed since last ${previousPhase} published`);
             }
+
+            logger.trace(phase !== "prod" ? `Switching to ${phase} pre-release` : "Switching to production");
 
             // Production version has no pre-release identifier.
             repository.updatePackageVersion(true, parsedVersion.majorVersion, parsedVersion.minorVersion, parsedVersion.patchVersion, phase !== "prod" ? phase : undefined);
@@ -314,20 +313,20 @@ class NonAlphaPublisher extends Publisher<Exclude<Phase, "alpha">> {
             let hasReleaseWorkflow = false;
 
             if (fs.existsSync(workflowsPath)) {
-                this.logger.debug("Checking workflows");
+                this.logger.trace("Checking workflows");
 
                 for (const workflowFile of fs.readdirSync(workflowsPath).filter(workflowFile => workflowFile.endsWith(".yml"))) {
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Workflow configuration format is known.
                     const workflowOn = (yamlParse(fs.readFileSync(path.resolve(workflowsPath, workflowFile)).toString()) as WorkflowConfiguration).on;
 
                     if (workflowOn.push !== undefined && (workflowOn.push?.branches === undefined || workflowOn.push.branches.includes("v*"))) {
-                        this.logger.debug("Repository has push workflow");
+                        this.logger.trace("Repository has push workflow");
 
                         hasPushWorkflow = true;
                     }
 
                     if (workflowOn.release !== undefined && (workflowOn.release?.types === undefined || workflowOn.release.types.includes("published"))) {
-                        this.logger.debug("Repository has release workflow");
+                        this.logger.trace("Repository has release workflow");
 
                         hasReleaseWorkflow = true;
                     }

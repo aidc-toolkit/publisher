@@ -178,7 +178,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
 
             output = [];
         } else {
-            this.logger.debug(runningCommand);
+            this.logger.trace(runningCommand);
 
             const spawnResult = spawnSync(command, allArgs, {
                 stdio: ["inherit", captureOutput ? "pipe" : "inherit", "inherit"]
@@ -200,7 +200,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
             output = captureOutput ? spawnResult.stdout.toString().split("\n").slice(0, -1) : [];
 
             if (captureOutput) {
-                this.logger.trace(`Output:\n${output.join("\n")}`);
+                this.logger.debug(`Output:\n${output.join("\n")}`);
             }
         }
 
@@ -271,20 +271,24 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
     protected abstract getDependencyVersion(dependencyRepository: Repository<TPhase>): string;
 
     /**
-     * Determine if repository change is valid for the phase.
+     * Handle remote changes. Called when remote changes are detected so that they may be handled before publishing.
      *
      * @returns
-     * True if repository change is valid for the phase.
+     * True if the phase allows for outstanding remote changes. Default is false.
      */
-    protected abstract isValidRepositoryChange(): boolean;
+    protected handleRemoteChanges(): boolean {
+        return false;
+    }
 
     /**
      * Determine if branch is valid for the phase.
      *
      * @returns
-     * True if branch is valid for the phase.
+     * True if branch is valid for the phase. Default is true.
      */
-    protected abstract isValidBranch(): boolean;
+    protected isValidBranch(): boolean {
+        return true;
+    }
 
     /**
      * Get the next branch in the versions or main if none.
@@ -395,7 +399,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
             }
         }
 
-        if (this.run(RunOptions.RunAlways, true, false, "git", "fetch", "--porcelain", "--dry-run").length !== 0 && !this.isValidRepositoryChange()) {
+        if (this.run(RunOptions.RunAlways, true, false, "git", "fetch", "--porcelain", "--dry-run").length !== 0 && !this.handleRemoteChanges()) {
             throw new Error("Remote repository has outstanding changes");
         }
 
@@ -481,6 +485,8 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
         const modifiedFiles: string[] = [];
 
         if (files.length === 0) {
+            this.logger.debug(`Committing all modified files with message "${message}`);
+
             modifiedFiles.push("--all");
         } else {
             for (const line of this.run(RunOptions.RunAlways, true, false, "git", "status", ...files, "--porcelain")) {
@@ -493,6 +499,12 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
                 }
 
                 modifiedFiles.push(modifiedFile);
+            }
+
+            if (modifiedFiles.length !== 0) {
+                this.logger.debug(`Committing modified files ${modifiedFiles} with message "${message}`);
+            } else {
+                this.logger.debug("No modified files to commit");
             }
         }
 
@@ -523,6 +535,8 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
      * Initialize publication.
      */
     protected async initialize(): Promise<void> {
+        this.logger.trace("Initializing...");
+
         this.#configuration = await Configuration.load<TPhase>(this.phase, this.logger, this.isDryRun);
 
         // Publisher is valid only when on latest version branch.
@@ -538,18 +552,25 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
      * Publish all repositories.
      */
     async publishAll(): Promise<void> {
+        const logger = this.logger;
+
         try {
             await i18nCoreInit(i18next.use(i18nCoreCLILanguageDetector)).then(async () => this.initialize());
 
             const configuration = this.configuration;
+            const publishState = configuration.publishState;
+
+            if (publishState.repositoryName !== undefined) {
+                logger.trace(`Resuming at ${publishState.repositoryName} repository`);
+            }
 
             const getDependencyVersion = this.getDependencyVersion.bind(this);
 
             const startDirectory = process.cwd();
 
-            for (const [repositoryName, repository] of Object.entries(configuration.repositories)) {
-                const publishState = configuration.publishState;
+            logger.debug(`Start directory is ${startDirectory}`);
 
+            for (const [repositoryName, repository] of Object.entries(configuration.repositories)) {
                 if (publishState.repositoryName === undefined || publishState.repositoryName === repositoryName) {
                     this.#repository = repository;
 
@@ -559,14 +580,18 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
                     const directory = `../${repository.directory}`;
 
                     if (fs.existsSync(directory) && fs.statSync(directory).isDirectory()) {
-                        this.logger.info(`Repository ${repositoryName}...`);
+                        logger.info(`Repository ${repositoryName}...`);
 
                         try {
                             process.chdir(directory);
 
                             repository.startPublish();
 
+                            logger.trace(`Working version from package.json is ${repository.workingVersion}`);
+
                             const branch = this.#getCurrentBranch();
+
+                            logger.trace(`Branch is ${branch}`);
 
                             this.#branch = branch;
 
@@ -575,6 +600,8 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
                             }
 
                             repository.alignWithBranch(branch);
+
+                            logger.trace(`Working version from branch is ${repository.workingVersion}`);
 
                             const updateDependencyPackageNamesSet = this.repository.updateOrganizationDependencies(getDependencyVersion);
 
@@ -587,6 +614,8 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
                             if (this.#isLatestVersionBranch || this.phase === undefined || repositoryName === "publisher") {
                                 // eslint-disable-next-line no-await-in-loop -- Next iteration requires previous to finish.
                                 await this.publish();
+                            } else {
+                                logger.trace("Skipped");
                             }
 
                             delete publishState.repositoryName;
@@ -599,7 +628,9 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
                             await configuration.save(false);
                         }
                     // Non-external repositories may be private and not accessible to all developers.
-                    } else if (repository.dependencyType === "external") {
+                    } else if (repository.dependencyType !== "external") {
+                        logger.trace(`Skipping ${repository.dependencyType} repository ${repositoryName}`);
+                    } else {
                         throw new Error(`Repository ${repositoryName} not found`);
                     }
                 }
@@ -607,7 +638,7 @@ export abstract class Publisher<TPhase extends Phase | undefined> {
 
             await this.finalize();
         } catch (e) {
-            this.logger.error("Publish all failed", e);
+            logger.error("Publish all failed", e);
         }
     }
 
